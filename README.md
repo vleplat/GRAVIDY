@@ -108,8 +108,7 @@ GRAVIDY includes 4 main benchmark scripts that compare different optimization al
 ### 1. **Stiefel Manifold Optimization** (`gravidy_st_benchmark.py`)
 **What it does:** Optimizes functions on the Stiefel manifold (matrices with orthogonal columns)
 **What it compares:**
-- GRAVIDY–St (Fast) - Our main algorithm
-- GRAVIDY–St (NR-Dense) - Dense variant
+- GRAVIDY–St (Fast) - Our main algorithm with Newton-Krylov inner solver
 - Wen–Yin Cayley - Classical method
 - RGD–QR - Riemannian gradient descent
 
@@ -121,8 +120,7 @@ python gravidy_st_benchmark.py
 ### 2. **Simplex Optimization** (`simplex_gravidy_benchmark.py`)
 **What it does:** Optimizes functions on the probability simplex (sum of components = 1, all ≥ 0)
 **What it compares:**
-- GRAVIDY–Δ (KL-prox) - Our KL-proximal method
-- GRAVIDY–Δ (MGN variant) - Modified Gauss-Newton variant
+- GRAVIDY–Δ (KL-prox) - Our KL-proximal method with Newton-KKT inner solver
 - PGD (baseline) - Projected gradient descent
 - APGD (Nesterov) - Accelerated projected gradient descent
 - EMD (baseline) - Entropic mirror descent
@@ -135,7 +133,8 @@ python simplex_gravidy_benchmark.py
 ### 3. **Box-Constrained Optimization** (`box_gravidy_benchmark.py`)
 **What it does:** Optimizes functions with box constraints (each variable in [lo, hi])
 **What it compares:**
-- GRAVIDY–box - Our sigmoid reparameterization method
+- GRAVIDY–box (Newton) - Our sigmoid reparameterization with damped Newton
+- GRAVIDY–box (MGN) - Our sigmoid reparameterization with Modified Gauss-Newton
 - APGD-box (Nesterov) - Accelerated projected gradient descent
 
 **Run it:**
@@ -146,7 +145,8 @@ python box_gravidy_benchmark.py
 ### 4. **Positive Orthant Optimization (NNLS)** (`pos_gravidy_benchmark.py`)
 **What it does:** Solves non-negative least squares problems (all variables ≥ 0)
 **What it compares:**
-- GRAVIDY–pos - Our exponential reparameterization method
+- GRAVIDY–pos (Newton) - Our exponential reparameterization with damped Newton
+- GRAVIDY–pos (MGN) - Our exponential reparameterization with Modified Gauss-Newton
 - PGD+Nesterov - Accelerated projected gradient descent
 - Proj-BB (Armijo) - Projected Barzilai-Borwein with line search
 - MU (A≥0,b≥0) - Multiplicative updates (requires non-negative data)
@@ -156,7 +156,30 @@ python box_gravidy_benchmark.py
 python pos_gravidy_benchmark.py
 ```
 
-## 📊 Understanding the Results
+## 📊 Paper-Grade Benchmarks
+
+For research and publication purposes, GRAVIDY also includes paper-grade benchmarks with multi-seed averaging and detailed metrics:
+
+### Paper-Grade Scripts
+- `gravidy_st_benchmark_paper.py` - Stiefel with gradient norm and feasibility plots
+- `simplex_gravidy_benchmark_paper.py` - Simplex with KKT residuals and objective gaps
+- `box_gravidy_benchmark_paper.py` - Box with KKT residuals and objective gaps  
+- `pos_gravidy_benchmark_paper.py` - Positive orthant with KKT residuals and objective gaps
+
+**Run any paper benchmark:**
+```bash
+python [method]_gravidy_benchmark_paper.py
+```
+
+### Paper-Grade Features
+- **Multi-seed averaging**: 10 trials with ±1 standard deviation bands
+- **KKT residuals**: `||x - Π_C(x - ∇Φ(x))||_2` for vector domains
+- **Gradient norms**: `||∇Φ(X)||_F` for Stiefel manifold
+- **Feasibility violations**: `||X^T X - I||_F` for Stiefel
+- **Objective gaps**: `|f(x_k) - f^*|` for convergence analysis
+- **Runtime reporting**: Wall-clock time measurements
+
+## 📈 Understanding the Results
 
 Each benchmark will:
 1. **Print a summary table** showing final errors, objective values, iterations, and timing
@@ -167,14 +190,27 @@ Each benchmark will:
 
 - **Error vs Iterations**: How quickly each method converges to the solution
 - **Objective vs Time**: How the objective function decreases over time
+- **KKT Residuals**: Optimality measure for constrained optimization
 - **Final Solutions**: Comparison of final results vs ground truth
 
 ### 📁 Generated Files
 
 After running any benchmark, you'll find these files in the `figs/` folder:
+
+**Regular benchmarks:**
 - `*_benchmark.pdf` - Complete comparison plots
 - `*_err_vs_it.pdf` - Error convergence plots
 - `*_f_vs_time.pdf` - Objective vs time plots
+
+**Paper benchmarks:**
+- `stiefel_grad_vs_it.pdf` - Gradient norm vs iterations (Stiefel)
+- `stiefel_feas_vs_time.pdf` - Feasibility vs time (Stiefel)
+- `simplex_err_vs_it.pdf` - Error vs iterations (Simplex)
+- `simplex_f_vs_time.pdf` - Objective vs time (Simplex)
+- `box_err_vs_it.pdf` - Error vs iterations (Box)
+- `box_f_vs_time.pdf` - Objective vs time (Box)
+- `pos_err_vs_it.pdf` - Error vs iterations (Positive orthant)
+- `pos_f_vs_time.pdf` - Objective vs time (Positive orthant)
 
 ## 🔬 Understanding GRAVIDY
 
@@ -182,10 +218,14 @@ After running any benchmark, you'll find these files in the `figs/` folder:
 
 GRAVIDY uses **implicit geometric integration** to solve constrained optimization problems:
 
-1. **GRAVIDY–St**: Implicit Cayley step with inner solver for Stiefel manifolds
+1. **GRAVIDY–St**: Implicit Cayley step with Newton-Krylov (GMRES) inner solver for Stiefel manifolds
 2. **GRAVIDY–Δ**: Implicit KL-proximal Newton-KKT for simplex constraints
-3. **GRAVIDY–box**: Implicit reparameterization using sigmoid functions
-4. **GRAVIDY–pos**: Implicit Euler in log-coordinates for positive orthant
+3. **GRAVIDY–box**: Implicit reparameterization using sigmoid functions with two inner solvers:
+   - **Newton**: Damped Newton solver
+   - **MGN**: Modified Gauss-Newton solver (recommended near active bounds)
+4. **GRAVIDY–pos**: Implicit Euler in log-coordinates for positive orthant with two inner solvers:
+   - **Newton**: Damped Newton solver
+   - **MGN**: Modified Gauss-Newton solver
 
 ### Key Advantages
 
@@ -193,24 +233,42 @@ GRAVIDY uses **implicit geometric integration** to solve constrained optimizatio
 - **Robust**: Handles ill-conditioned problems well
 - **Theoretically sound**: Based on geometric integration principles
 - **Practical**: Easy to use and tune
+- **Multiple inner solvers**: Choose between Newton and MGN based on problem characteristics
 
 ## 🛠️ Project Structure
 
 ```
 GRAVIDY/
 ├── solver/                    # Optimization algorithms
-│   ├── gravidy_st_*.py       # Stiefel manifold solvers
-│   ├── gravidy_delta_*.py    # Simplex solvers
-│   ├── gravidy_box.py        # Box constraint solver
-│   ├── gravidy_pos.py        # Positive orthant solver
-│   └── [competitor methods]  # Baseline algorithms
+│   ├── gravidy_st_fast.py    # Stiefel manifold solver (Newton-Krylov)
+│   ├── gravidy_st_nk.py      # Stiefel manifold solver (Newton-Krylov)
+│   ├── gravidy_st_nr_dense.py # Stiefel manifold solver (dense Newton)
+│   ├── gravidy_delta.py      # Simplex solver (KL-proximal)
+│   ├── gravidy_box.py        # Box constraint solver (Newton)
+│   ├── gravidy_box_mgn.py    # Box constraint solver (MGN)
+│   ├── gravidy_pos.py        # Positive orthant solver (Newton)
+│   ├── gravidy_pos_mgn.py    # Positive orthant solver (MGN)
+│   ├── wy_cayley.py          # Wen-Yin Cayley method
+│   ├── rgd_qr.py             # Riemannian gradient descent
+│   ├── pgd_simplex.py        # Projected gradient descent (simplex)
+│   ├── apgd_simplex.py       # Accelerated PGD (simplex)
+│   ├── emd_simplex.py        # Entropic mirror descent
+│   ├── pgd_box.py            # Projected gradient descent (box)
+│   ├── apgd_box.py           # Accelerated PGD (box)
+│   ├── pgd_pos.py            # Projected gradient descent (positive)
+│   ├── apgd_pos.py           # Accelerated PGD (positive)
+│   ├── proj_bb_pos.py        # Projected Barzilai-Borwein
+│   └── mu_pos.py             # Multiplicative updates
 ├── utils/                     # Utility functions
 │   ├── objective.py          # Objective function definitions
 │   ├── simplex_utils.py      # Simplex utilities
 │   ├── box_objective.py      # Box constraint objectives
 │   └── pos_objective.py      # Positive orthant objectives
-├── *_gravidy_benchmark.py    # Main benchmark scripts
+├── *_gravidy_benchmark.py    # Regular benchmark scripts
+├── *_gravidy_benchmark_paper.py # Paper-grade benchmark scripts
 ├── requirements.txt          # Python dependencies
+├── test_installation.py      # Installation verification
+├── demo.py                   # Quick demonstration
 └── README.md                # This file
 ```
 
@@ -251,6 +309,12 @@ Each benchmark script has parameters you can modify:
 - `max_iters`: Maximum iterations
 - `n, m`: Problem dimensions
 - `seed`: Random seed for reproducibility
+
+### Inner Solver Selection
+
+For box and positive orthant problems, you can choose between inner solvers:
+- **Newton**: Better for well-conditioned problems
+- **MGN**: Better for ill-conditioned problems or near active bounds
 
 ### Adding New Problems
 
