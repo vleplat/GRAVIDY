@@ -191,8 +191,8 @@ def run_multi_seed_benchmark(n=200, p=2, cond=50.0, max_outer=1000, max_iters=50
         all_results.append(results)
     
     # Compute statistics
-    methods = ['gravidy_fast', 'wy_cayley', 'rgd_qr']
-    method_names = ['GRAVIDY–St (Fast)', 'Wen–Yin Cayley', 'RGD–QR']
+    methods = ['gravidy_fast', 'gravidy_dense', 'wy_cayley', 'rgd_qr']
+    method_names = ['GRAVIDY–St (Fast)', 'GRAVIDY–St (NR-Dense Fast)', 'Wen–Yin Cayley', 'RGD–QR']
     
     stats = {}
     for i, method in enumerate(methods):
@@ -232,10 +232,10 @@ def run_multi_seed_benchmark(n=200, p=2, cond=50.0, max_outer=1000, max_iters=50
 
 def plot_paper_results(all_results, stats, prob):
     """Create paper-quality plots with error bars."""
-    methods = ['gravidy_fast', 'wy_cayley', 'rgd_qr'] 
-    colors = ['red', 'blue', 'green']
-    linestyles = ['-', '--', ':']
-    method_names = ['GRAVIDY–St (Fast)', 'Wen–Yin Cayley', 'RGD–QR']
+    methods = ['gravidy_fast', 'gravidy_dense', 'wy_cayley', 'rgd_qr'] 
+    colors = ['red', 'blue', 'green', 'orange']
+    linestyles = ['-', '--', ':', '-.']
+    method_names = ['GRAVIDY–St (Fast)', 'GRAVIDY–St (NR-Dense Fast)', 'Wen–Yin Cayley', 'RGD–QR']
     
     # Determine common iteration grid
     max_iters = max(len(all_results[0][method]['grad_norm']) for method in methods)
