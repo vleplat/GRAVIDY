@@ -31,29 +31,52 @@ def run_single_trial(problem, x_star, eta=30.0, max_iters=400, seed=0, tol_kkt=1
     np.random.seed(seed)
     x0 = np.maximum(np.random.randn(problem.n), 0.1)
     
-    # GRAVIDY–pos
+    # GRAVIDY–pos (Newton)
     start_time = time.perf_counter()
-    x_grav, hist_grav = GRAVIDY_pos(problem, eta=eta, max_outer=max_iters, 
-                                   tol_grad=tol_kkt, verbose=False)
-    time_grav = time.perf_counter() - start_time
+    x_grav_newton, hist_grav_newton = GRAVIDY_pos(problem, eta=eta, max_outer=max_iters, 
+                                                 tol_grad=tol_kkt, inner='newton', verbose=False)
+    time_grav_newton = time.perf_counter() - start_time
     
     # Extract trajectories with KKT residuals
-    # Note: we need to run the algorithm again to collect trajectory points
-    # or modify solvers to return full trajectory - for now use final point
-    kkt_grav = [entry[2] for entry in hist_grav]  # grad_norm approximates KKT
-    f_grav = [entry[1] for entry in hist_grav]    # objective values
-    times_grav = [entry[3] for entry in hist_grav]  # times
+    kkt_grav_newton = [entry[2] for entry in hist_grav_newton]  # grad_norm approximates KKT
+    f_grav_newton = [entry[1] for entry in hist_grav_newton]    # objective values
+    times_grav_newton = [entry[3] for entry in hist_grav_newton]  # times
     
     # Compute actual KKT residual for final point
-    grad_final = problem.grad(x_grav)
-    projected_final = problem.project(x_grav - grad_final)
-    kkt_final = np.linalg.norm(x_grav - projected_final)
+    grad_final = problem.grad(x_grav_newton)
+    projected_final = problem.project(x_grav_newton - grad_final)
+    kkt_final = np.linalg.norm(x_grav_newton - projected_final)
     
-    results['gravidy'] = {
-        'kkt': kkt_grav,
-        'objective': f_grav,
-        'times': times_grav,
-        'final_error': np.linalg.norm(x_grav - x_star),
+    results['gravidy_newton'] = {
+        'kkt': kkt_grav_newton,
+        'objective': f_grav_newton,
+        'times': times_grav_newton,
+        'final_error': np.linalg.norm(x_grav_newton - x_star),
+        'final_kkt': kkt_final,
+        'converged': kkt_final <= tol_kkt
+    }
+    
+    # GRAVIDY–pos (MGN)
+    start_time = time.perf_counter()
+    x_grav_mgn, hist_grav_mgn = GRAVIDY_pos(problem, eta=eta, max_outer=max_iters, 
+                                           tol_grad=tol_kkt, inner='mgn', verbose=False)
+    time_grav_mgn = time.perf_counter() - start_time
+    
+    # Extract trajectories with KKT residuals
+    kkt_grav_mgn = [entry[2] for entry in hist_grav_mgn]  # grad_norm approximates KKT
+    f_grav_mgn = [entry[1] for entry in hist_grav_mgn]    # objective values
+    times_grav_mgn = [entry[3] for entry in hist_grav_mgn]  # times
+    
+    # Compute actual KKT residual for final point
+    grad_final = problem.grad(x_grav_mgn)
+    projected_final = problem.project(x_grav_mgn - grad_final)
+    kkt_final = np.linalg.norm(x_grav_mgn - projected_final)
+    
+    results['gravidy_mgn'] = {
+        'kkt': kkt_grav_mgn,
+        'objective': f_grav_mgn,
+        'times': times_grav_mgn,
+        'final_error': np.linalg.norm(x_grav_mgn - x_star),
         'final_kkt': kkt_final,
         'converged': kkt_final <= tol_kkt
     }
@@ -162,8 +185,8 @@ def run_multi_seed_benchmark(n=120, m=120, density=0.15, eta=30.0, max_iters=400
         all_results.append(results)
     
     # Compute statistics
-    methods = ['gravidy', 'apgd', 'bb', 'mu']
-    method_names = ['GRAVIDY–pos', 'PGD+Nesterov', 'Proj-BB (Armijo)', 'MU (A≥0,b≥0)']
+    methods = ['gravidy_newton', 'gravidy_mgn', 'apgd', 'bb', 'mu']
+    method_names = ['GRAVIDY–pos (Newton)', 'GRAVIDY–pos (MGN)', 'PGD+Nesterov', 'Proj-BB (Armijo)', 'MU (A≥0,b≥0)']
     
     stats = {}
     for i, method in enumerate(methods):
@@ -198,10 +221,10 @@ def run_multi_seed_benchmark(n=120, m=120, density=0.15, eta=30.0, max_iters=400
 
 def plot_paper_results(all_results, stats, problem, x_star, f_star):
     """Create paper-quality plots with error bars."""
-    methods = ['gravidy', 'apgd', 'bb', 'mu'] 
-    colors = ['red', 'blue', 'green', 'magenta']
-    linestyles = ['-', '--', ':', '-.']
-    method_names = ['GRAVIDY–pos (implicit Newton)', 'PGD+Nesterov', 
+    methods = ['gravidy_newton', 'gravidy_mgn', 'apgd', 'bb', 'mu'] 
+    colors = ['red', 'darkred', 'blue', 'green', 'magenta']
+    linestyles = ['-', '--', ':', '-.', '-']
+    method_names = ['GRAVIDY–pos (Newton)', 'GRAVIDY–pos (MGN)', 'PGD+Nesterov', 
                    'Proj-BB (Armijo)', 'MU (A≥0,b≥0)']
     
     # Determine common iteration grid

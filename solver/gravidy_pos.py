@@ -81,7 +81,7 @@ def gravidy_pos_step(u_k, eta, A, b, tol=1e-10, max_newton=50, backtrack_beta=0.
     return u, x_next
 
 
-def GRAVIDY_pos(problem, eta=30.0, max_outer=400, tol_grad=1e-10, verbose=False):
+def GRAVIDY_pos(problem, eta=30.0, max_outer=400, tol_grad=1e-10, inner='newton', verbose=False):
     """
     GRAVIDY–pos solver for positive orthant optimization.
     
@@ -90,6 +90,7 @@ def GRAVIDY_pos(problem, eta=30.0, max_outer=400, tol_grad=1e-10, verbose=False)
         eta: Step size parameter
         max_outer: Maximum outer iterations
         tol_grad: Convergence tolerance
+        inner: Inner solver ('newton' or 'mgn')
         verbose: Print progress
         
     Returns:
@@ -117,13 +118,21 @@ def GRAVIDY_pos(problem, eta=30.0, max_outer=400, tol_grad=1e-10, verbose=False)
         history.append((k, obj_val, grad_norm, current_time))
         
         if verbose and k % 50 == 0:
-            print(f"[GRAVIDY-pos] iter={k:4d} f={obj_val:.6e} ||grad||={grad_norm:.3e} time={current_time:.2f}s")
+            print(f"[GRAVIDY-pos/{inner}] iter={k:4d} f={obj_val:.6e} ||grad||={grad_norm:.3e} time={current_time:.2f}s")
         
         # Check convergence
         if grad_norm <= tol_grad:
             break
         
-        # GRAVIDY–pos step
-        u, x = gravidy_pos_step(u, eta, A, b, tol=1e-10)
+        # GRAVIDY–pos step with chosen inner solver
+        if inner == 'newton':
+            u, x = gravidy_pos_step(u, eta, A, b, tol=1e-10)
+        elif inner == 'mgn':
+            # Import and use MGN solver
+            from .gravidy_pos_mgn import gravidy_pos_step_mgn, PositiveLeastSquares
+            prob_wrapper = PositiveLeastSquares(A, b)
+            u, x = gravidy_pos_step_mgn(u, eta, prob_wrapper, tol=1e-10, max_iter=50)
+        else:
+            raise ValueError("inner must be 'newton' or 'mgn'")
     
     return x, history
