@@ -48,12 +48,19 @@ def run_box_benchmark(n=100, m=100, eta=10.0, max_iters=250,
     
     results = {}
     
-    # ---- GRAVIDY–box ----
-    print("Running GRAVIDY–box...")
+    # ---- GRAVIDY–box (Newton) ----
+    print("Running GRAVIDY–box (Newton)...")
     t0 = time.perf_counter()
-    x_grav, hist_grav = GRAVIDY_box(problem, eta=eta, max_outer=max_iters, 
-                                   tol_grad=1e-10, verbose=verbose)
-    t_grav = time.perf_counter() - t0
+    x_grav_newton, hist_grav_newton = GRAVIDY_box(problem, eta=eta, max_outer=max_iters, 
+                                                 tol_grad=1e-10, inner='newton', verbose=verbose)
+    t_grav_newton = time.perf_counter() - t0
+    
+    # ---- GRAVIDY–box (MGN) ----
+    print("Running GRAVIDY–box (MGN)...")
+    t0 = time.perf_counter()
+    x_grav_mgn, hist_grav_mgn = GRAVIDY_box(problem, eta=eta, max_outer=max_iters, 
+                                           tol_grad=1e-10, inner='mgn', verbose=verbose)
+    t_grav_mgn = time.perf_counter() - t0
     
     # ---- APGD baseline ----
     print("Running APGD-box (Nesterov accelerated)...")
@@ -70,7 +77,8 @@ def run_box_benchmark(n=100, m=100, eta=10.0, max_iters=250,
         iters = len(hist)
         return err, f_gap, iters
     
-    err_grav, gap_grav, iters_grav = get_final_stats(x_grav, hist_grav)
+    err_grav_newton, gap_grav_newton, iters_grav_newton = get_final_stats(x_grav_newton, hist_grav_newton)
+    err_grav_mgn, gap_grav_mgn, iters_grav_mgn = get_final_stats(x_grav_mgn, hist_grav_mgn)
     err_apgd, gap_apgd, iters_apgd = get_final_stats(x_apgd, hist_apgd)
     
     # Print summary
@@ -79,14 +87,16 @@ def run_box_benchmark(n=100, m=100, eta=10.0, max_iters=250,
     print("=" * 75)
     print(f"{'Method':<25} {'||x-x*||_2':<12} {'f(x)-f*':<12} {'Iters':<8} {'Time [s]':<10}")
     print("-" * 75)
-    print(f"{'GRAVIDY–box':<25} {err_grav:<12.3e} {gap_grav:<12.3e} {iters_grav:<8} {t_grav:<10.3f}")
+    print(f"{'GRAVIDY–box (Newton)':<25} {err_grav_newton:<12.3e} {gap_grav_newton:<12.3e} {iters_grav_newton:<8} {t_grav_newton:<10.3f}")
+    print(f"{'GRAVIDY–box (MGN)':<25} {err_grav_mgn:<12.3e} {gap_grav_mgn:<12.3e} {iters_grav_mgn:<8} {t_grav_mgn:<10.3f}")
     print(f"{'APGD-box (Nesterov)':<25} {err_apgd:<12.3e} {gap_apgd:<12.3e} {iters_apgd:<8} {t_apgd:<10.3f}")
     print("=" * 75)
     
     # Store results
     results = {
         'problem': {'A': A, 'b': b, 'lo': lo, 'hi': hi, 'x_star': x_star, 'f_star': f_star},
-        'gravidy_box': {'x': x_grav, 'hist': hist_grav, 'time': t_grav},
+        'gravidy_box_newton': {'x': x_grav_newton, 'hist': hist_grav_newton, 'time': t_grav_newton},
+        'gravidy_box_mgn': {'x': x_grav_mgn, 'hist': hist_grav_mgn, 'time': t_grav_mgn},
         'apgd_box': {'x': x_apgd, 'hist': hist_apgd, 'time': t_apgd}
     }
     
@@ -109,7 +119,8 @@ def plot_results(results):
         return np.array(iters), np.array(objs), np.array(grads), np.array(times)
     
     # Note: For simplicity, computing errors properly would require storing x trajectory
-    it_grav, f_grav, g_grav, t_grav = extract_arrays(results['gravidy_box']['hist'])
+    it_grav_newton, f_grav_newton, g_grav_newton, t_grav_newton = extract_arrays(results['gravidy_box_newton']['hist'])
+    it_grav_mgn, f_grav_mgn, g_grav_mgn, t_grav_mgn = extract_arrays(results['gravidy_box_mgn']['hist'])
     it_apgd, f_apgd, g_apgd, t_apgd = extract_arrays(results['apgd_box']['hist'])
     
     # Set up plotting
@@ -127,7 +138,8 @@ def plot_results(results):
     
     # Plot 1: Objective gap vs iterations
     ax = axes[0, 0]
-    ax.semilogy(it_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–box')
+    ax.semilogy(it_grav_newton, np.abs(f_grav_newton - f_star), 'r-', linewidth=3, label='GRAVIDY–box (Newton)')
+    ax.semilogy(it_grav_mgn, np.abs(f_grav_mgn - f_star), 'g-', linewidth=3, label='GRAVIDY–box (MGN)')
     ax.semilogy(it_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='APGD-box (Nesterov)')
     ax.set_xlabel('Iterations', fontweight='bold')
     ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
@@ -148,12 +160,13 @@ def plot_results(results):
         return np.linalg.norm(x_final - projected)
     
     kkt_values = [
-        compute_kkt_residual(results['gravidy_box']['x']),
+        compute_kkt_residual(results['gravidy_box_newton']['x']),
+        compute_kkt_residual(results['gravidy_box_mgn']['x']),
         compute_kkt_residual(results['apgd_box']['x'])
     ]
     
-    methods = ['GRAVIDY–box', 'APGD-box']
-    colors = ['red', 'blue']
+    methods = ['GRAVIDY–box (Newton)', 'GRAVIDY–box (MGN)', 'APGD-box']
+    colors = ['red', 'green', 'blue']
     
     bars = ax.bar(methods, kkt_values, color=colors, alpha=0.8)
     ax.set_ylabel(r'KKT residual $\|x - \Pi_C(x - \nabla f(x))\|_2$', fontweight='bold')
@@ -173,8 +186,10 @@ def plot_results(results):
     indices = np.arange(n)
     width = 0.35
     
-    ax.bar(indices - width, results['gravidy_box']['x'], width, 
-           label='GRAVIDY–box', alpha=0.8, color='red')
+    ax.bar(indices - width, results['gravidy_box_newton']['x'], width, 
+           label='GRAVIDY–box (Newton)', alpha=0.8, color='red')
+    ax.bar(indices, results['gravidy_box_mgn']['x'], width,
+           label='GRAVIDY–box (MGN)', alpha=0.8, color='green')
     ax.bar(indices + width, results['apgd_box']['x'], width,
            label='APGD-box (Nesterov)', alpha=0.8, color='blue')
     ax.plot(indices, x_star, 'ko-', linewidth=2, markersize=4, 
@@ -188,7 +203,8 @@ def plot_results(results):
     
     # Plot 4: Objective gap vs time (loglog)
     ax = axes[1, 1]
-    ax.loglog(t_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–box')
+    ax.loglog(t_grav_newton, np.abs(f_grav_newton - f_star), 'r-', linewidth=3, label='GRAVIDY–box (Newton)')
+    ax.loglog(t_grav_mgn, np.abs(f_grav_mgn - f_star), 'g-', linewidth=3, label='GRAVIDY–box (MGN)')
     ax.loglog(t_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='APGD-box (Nesterov)')
     ax.set_xlabel('Time [seconds]', fontweight='bold')
     ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
@@ -208,10 +224,12 @@ def plot_results(results):
     
     # Figure 1: Objective gap vs iterations
     plt.figure(figsize=(7, 5))
-    it_grav, f_grav, g_grav, t_grav = extract_arrays(results['gravidy_box']['hist'])
+    it_grav_newton, f_grav_newton, g_grav_newton, t_grav_newton = extract_arrays(results['gravidy_box_newton']['hist'])
+    it_grav_mgn, f_grav_mgn, g_grav_mgn, t_grav_mgn = extract_arrays(results['gravidy_box_mgn']['hist'])
     it_apgd, f_apgd, g_apgd, t_apgd = extract_arrays(results['apgd_box']['hist'])
     
-    plt.semilogy(it_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–box')
+    plt.semilogy(it_grav_newton, np.abs(f_grav_newton - f_star), 'r-', linewidth=3, label='GRAVIDY–box (Newton)')
+    plt.semilogy(it_grav_mgn, np.abs(f_grav_mgn - f_star), 'g-', linewidth=3, label='GRAVIDY–box (MGN)')
     plt.semilogy(it_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='APGD-box (Nesterov)')
     plt.xlabel('Iterations', fontweight='bold')
     plt.ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
@@ -223,7 +241,8 @@ def plot_results(results):
     
     # Figure 2: Objective gap vs time
     plt.figure(figsize=(7, 5))
-    plt.loglog(t_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–box')
+    plt.loglog(t_grav_newton, np.abs(f_grav_newton - f_star), 'r-', linewidth=3, label='GRAVIDY–box (Newton)')
+    plt.loglog(t_grav_mgn, np.abs(f_grav_mgn - f_star), 'g-', linewidth=3, label='GRAVIDY–box (MGN)')
     plt.loglog(t_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='APGD-box (Nesterov)')
     plt.xlabel('Time [seconds]', fontweight='bold')
     plt.ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
@@ -247,10 +266,12 @@ if __name__ == "__main__":
                                    max_iters=250, seed=20, verbose=False)
         
         # Extract final errors
-        err_grav = np.linalg.norm(results['gravidy_box']['x'] - results['problem']['x_star'])
+        err_grav_newton = np.linalg.norm(results['gravidy_box_newton']['x'] - results['problem']['x_star'])
+        err_grav_mgn = np.linalg.norm(results['gravidy_box_mgn']['x'] - results['problem']['x_star'])
         err_apgd = np.linalg.norm(results['apgd_box']['x'] - results['problem']['x_star'])
         
-        print(f"GRAVIDY–box final error: {err_grav:.3e}")
+        print(f"GRAVIDY–box (Newton) final error: {err_grav_newton:.3e}")
+        print(f"GRAVIDY–box (MGN) final error: {err_grav_mgn:.3e}")
         print(f"APGD-box final error: {err_apgd:.3e}")
     
     # Run final benchmark with highest eta for detailed plots

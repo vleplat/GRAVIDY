@@ -97,7 +97,7 @@ def gravidy_box_step(z_k, eta, A, b, lo, hi, tol=1e-10, max_newton=50, backtrack
     return z, g_x(z)
 
 
-def GRAVIDY_box(problem, eta=10.0, max_outer=200, tol_grad=1e-10, verbose=False):
+def GRAVIDY_box(problem, eta=10.0, max_outer=200, tol_grad=1e-10, inner='newton', verbose=False):
     """
     GRAVIDY–box solver for box-constrained optimization.
     
@@ -135,13 +135,21 @@ def GRAVIDY_box(problem, eta=10.0, max_outer=200, tol_grad=1e-10, verbose=False)
         history.append((k, obj_val, grad_norm, current_time))
         
         if verbose and k % 50 == 0:
-            print(f"[GRAVIDY-box] iter={k:4d} f={obj_val:.6e} ||grad||={grad_norm:.3e} time={current_time:.2f}s")
+            print(f"[GRAVIDY-box/{inner}] iter={k:4d} f={obj_val:.6e} ||grad||={grad_norm:.3e} time={current_time:.2f}s")
         
         # Check convergence
         if grad_norm <= tol_grad:
             break
         
         # GRAVIDY–box step
-        z, x = gravidy_box_step(z, eta, A, b, lo, hi, tol=1e-10)
+        if inner == 'newton':
+            z, x = gravidy_box_step(z, eta, A, b, lo, hi, tol=1e-10)
+        elif inner == 'mgn':
+            # Import MGN step from the new module
+            from .gravidy_box_mgn import gravidy_box_step_mgn, BoxLeastSquares
+            prob_mgn = BoxLeastSquares(A, b, lo, hi)
+            z, x = gravidy_box_step_mgn(z, eta, prob_mgn, tol=1e-10, max_iter=50)
+        else:
+            raise ValueError("inner must be 'newton' or 'mgn'")
     
     return x, history

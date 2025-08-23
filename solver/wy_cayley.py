@@ -21,7 +21,7 @@ def WY_cayley(problem,
     X = X0.copy()
     f = problem.f
     n, p = X.shape
-    hist = {"it": [], "time": [], "f": [], "feas": []}
+    hist = {"it": [], "time": [], "f": [], "feas": [], "grad_norm": []}
     t0 = time.time()
     alpha = alpha0
 
@@ -33,6 +33,7 @@ def WY_cayley(problem,
         hist["time"].append(time.time() - t0)
         hist["f"].append(f(X))
         hist["feas"].append(feas)
+        hist["grad_norm"].append(gnorm)
 
         if verbose:
             print(f"[WY]  it={k:3d} f={hist['f'][-1]:.6e} ||grad||={gnorm:.3e} feas={feas:.2e} alpha={alpha:.2e}")

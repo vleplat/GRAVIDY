@@ -25,26 +25,50 @@ def run_single_trial(problem, x_star, eta=50.0, max_iters=250, seed=0, tol_kkt=1
     
     results = {}
     
-    # GRAVIDY–box
+    # GRAVIDY–box (Newton)
     start_time = time.perf_counter()
-    x_grav, hist_grav = GRAVIDY_box(problem, eta=eta, max_outer=max_iters, 
-                                   tol_grad=tol_kkt, verbose=False)
-    time_grav = time.perf_counter() - start_time
+    x_grav_newton, hist_grav_newton = GRAVIDY_box(problem, eta=eta, max_outer=max_iters, 
+                                                 tol_grad=tol_kkt, inner='newton', verbose=False)
+    time_grav_newton = time.perf_counter() - start_time
     
-    kkt_grav = [entry[2] for entry in hist_grav]  # grad_norm approximates KKT
-    f_grav = [entry[1] for entry in hist_grav]    # objective values
-    times_grav = [entry[3] for entry in hist_grav]  # times
+    kkt_grav_newton = [entry[2] for entry in hist_grav_newton]  # grad_norm approximates KKT
+    f_grav_newton = [entry[1] for entry in hist_grav_newton]    # objective values
+    times_grav_newton = [entry[3] for entry in hist_grav_newton]  # times
     
     # Compute actual KKT residual for final point
-    grad_final = problem.grad(x_grav)
-    projected_final = problem.project(x_grav - grad_final)
-    kkt_final = np.linalg.norm(x_grav - projected_final)
+    grad_final = problem.grad(x_grav_newton)
+    projected_final = problem.project(x_grav_newton - grad_final)
+    kkt_final = np.linalg.norm(x_grav_newton - projected_final)
     
-    results['gravidy'] = {
-        'kkt': kkt_grav,
-        'objective': f_grav,
-        'times': times_grav,
-        'final_error': np.linalg.norm(x_grav - x_star),
+    results['gravidy_newton'] = {
+        'kkt': kkt_grav_newton,
+        'objective': f_grav_newton,
+        'times': times_grav_newton,
+        'final_error': np.linalg.norm(x_grav_newton - x_star),
+        'final_kkt': kkt_final,
+        'converged': kkt_final <= tol_kkt
+    }
+    
+    # GRAVIDY–box (MGN)
+    start_time = time.perf_counter()
+    x_grav_mgn, hist_grav_mgn = GRAVIDY_box(problem, eta=eta, max_outer=max_iters, 
+                                           tol_grad=tol_kkt, inner='mgn', verbose=False)
+    time_grav_mgn = time.perf_counter() - start_time
+    
+    kkt_grav_mgn = [entry[2] for entry in hist_grav_mgn]  # grad_norm approximates KKT
+    f_grav_mgn = [entry[1] for entry in hist_grav_mgn]    # objective values
+    times_grav_mgn = [entry[3] for entry in hist_grav_mgn]  # times
+    
+    # Compute actual KKT residual for final point
+    grad_final = problem.grad(x_grav_mgn)
+    projected_final = problem.project(x_grav_mgn - grad_final)
+    kkt_final = np.linalg.norm(x_grav_mgn - projected_final)
+    
+    results['gravidy_mgn'] = {
+        'kkt': kkt_grav_mgn,
+        'objective': f_grav_mgn,
+        'times': times_grav_mgn,
+        'final_error': np.linalg.norm(x_grav_mgn - x_star),
         'final_kkt': kkt_final,
         'converged': kkt_final <= tol_kkt
     }
@@ -86,7 +110,7 @@ def run_multi_seed_benchmark(n=100, m=100, eta=50.0, max_iters=250,
     print("-" * 70)
     
     # Generate problem (same for all trials)
-    A, b, lo, hi, x_star, problem = create_box_test_problem(n, m, seed=42)
+    A, b, lo, hi, x_star, problem = create_box_test_problem(n, m, seed=100)
     f_star = problem.f(x_star)
     
     print(f"Ground truth objective f* = {f_star:.6e}")
@@ -104,15 +128,15 @@ def run_multi_seed_benchmark(n=100, m=100, eta=50.0, max_iters=250,
         all_results.append(results)
     
     # Compute statistics
-    methods = ['gravidy', 'apgd']
-    method_names = ['GRAVIDY–box', 'APGD-box (Nesterov)']
+    methods = ['gravidy_newton', 'gravidy_mgn', 'apgd']
+    method_names = ['GRAVIDY–box (Newton)', 'GRAVIDY–box (MGN)', 'APGD-box (Nesterov)']
     
     stats = {}
     for i, method in enumerate(methods):
         # Collect final metrics
         final_errors = [r[method]['final_error'] for r in all_results]
         final_kkt = [r[method]['final_kkt'] for r in all_results]
-        converged = [r[method]['converged'] for r in all_results]
+        final_objectives = [r[method]['objective'][-1] for r in all_results]  # Final objective value
         
         stats[method] = {
             'name': method_names[i],
@@ -120,19 +144,20 @@ def run_multi_seed_benchmark(n=100, m=100, eta=50.0, max_iters=250,
             'final_error_std': np.std(final_errors),
             'final_kkt_mean': np.mean(final_kkt),
             'final_kkt_std': np.std(final_kkt),
-            'convergence_rate': np.mean(converged)
+            'final_obj_mean': np.mean(final_objectives),
+            'final_obj_std': np.std(final_objectives)
         }
     
     # Print summary
     print("\n" + "="*80)
     print("BENCHMARK SUMMARY (averaged over {} trials)".format(n_trials))
     print("="*80)
-    print(f"{'Method':<25} {'||x-x*||_2':<15} {'KKT residual':<15} {'Conv. rate':<10}")
+    print(f"{'Method':<25} {'||x-x*||_2':<15} {'KKT residual':<15} {'Final obj':<15}")
     print("-" * 80)
     for method in methods:
         s = stats[method]
         print(f"{s['name']:<25} {s['final_error_mean']:<7.3e}±{s['final_error_std']:<6.2e} "
-              f"{s['final_kkt_mean']:<7.3e}±{s['final_kkt_std']:<6.2e} {s['convergence_rate']:<10.2f}")
+              f"{s['final_kkt_mean']:<7.3e}±{s['final_kkt_std']:<6.2e} {s['final_obj_mean']:<7.3e}±{s['final_obj_std']:<6.2e}")
     print("="*80)
     
     return all_results, stats, problem, x_star, f_star
@@ -140,10 +165,10 @@ def run_multi_seed_benchmark(n=100, m=100, eta=50.0, max_iters=250,
 
 def plot_paper_results(all_results, stats, problem, x_star, f_star):
     """Create paper-quality plots with error bars."""
-    methods = ['gravidy', 'apgd'] 
-    colors = ['red', 'blue']
-    linestyles = ['-', '--']
-    method_names = ['GRAVIDY–box', 'APGD-box (Nesterov)']
+    methods = ['gravidy_newton', 'gravidy_mgn', 'apgd'] 
+    colors = ['red', 'green', 'blue']
+    linestyles = ['-', '-', '--']
+    method_names = ['GRAVIDY–box (Newton)', 'GRAVIDY–box (MGN)', 'APGD-box (Nesterov)']
     
     # Determine common iteration grid
     max_iters = max(len(all_results[0][method]['kkt']) for method in methods)
@@ -311,7 +336,7 @@ def plot_paper_results(all_results, stats, problem, x_star, f_star):
 if __name__ == "__main__":
     # Paper-grade benchmark
     all_results, stats, problem, x_star, f_star = run_multi_seed_benchmark(
-        n=100, m=100, eta=400.0, max_iters=250, 
+        n=100, m=100, eta=300.0, max_iters=400, 
         n_trials=10, tol_kkt=1e-6
     )
     

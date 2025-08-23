@@ -268,13 +268,19 @@ def run_benchmark(n=300, p=5, cond=50.0, seed=0,
     final_feas_wy = H_wy["feas"][-1]
     final_feas_rgd = H_rgd["feas"][-1]
     
-    print(f"{'Solver':<25} {'Final Obj':<15} {'Final Feas':<15} {'Iterations':<12} {'Time [s]':<10}")
-    print("-" * 85)
-    print(f"{'GRAVIDY–St (Fast)':<25} {final_obj_fast:<15.6e} {final_feas_fast:<15.2e} {len(H_fast['it']):<12} {H_fast['time'][-1]:<10.2f}")
-    print(f"{'GRAVIDY–St (NR-Dense)':<25} {final_obj_dense:<15.6e} {final_feas_dense:<15.2e} {len(H_dense['it']):<12} {H_dense['time'][-1]:<10.2f}")
-    print(f"{'Wen–Yin Cayley':<25} {final_obj_wy:<15.6e} {final_feas_wy:<15.2e} {len(H_wy['it']):<12} {H_wy['time'][-1]:<10.2f}")
-    print(f"{'RGD–QR':<25} {final_obj_rgd:<15.6e} {final_feas_rgd:<15.2e} {len(H_rgd['it']):<12} {H_rgd['time'][-1]:<10.2f}")
-    print("="*85)
+    # Compute final gradient norms
+    final_grad_fast = H_fast["grad_norm"][-1] if "grad_norm" in H_fast else np.linalg.norm(prob.grad_riem(X_fast), 'fro')
+    final_grad_dense = H_dense["grad_norm"][-1] if "grad_norm" in H_dense else np.linalg.norm(prob.grad_riem(X_dense), 'fro')
+    final_grad_wy = H_wy["grad_norm"][-1] if "grad_norm" in H_wy else np.linalg.norm(prob.grad_riem(X_wy), 'fro')
+    final_grad_rgd = H_rgd["grad_norm"][-1] if "grad_norm" in H_rgd else np.linalg.norm(prob.grad_riem(X_rgd), 'fro')
+    
+    print(f"{'Solver':<25} {'Final Obj':<15} {'Final Feas':<15} {'Final Grad':<15} {'Iterations':<12} {'Time [s]':<10}")
+    print("-" * 100)
+    print(f"{'GRAVIDY–St (Fast)':<25} {final_obj_fast:<15.6e} {final_feas_fast:<15.2e} {final_grad_fast:<15.2e} {len(H_fast['it']):<12} {H_fast['time'][-1]:<10.2f}")
+    print(f"{'GRAVIDY–St (NR-Dense)':<25} {final_obj_dense:<15.6e} {final_feas_dense:<15.2e} {final_grad_dense:<15.2e} {len(H_dense['it']):<12} {H_dense['time'][-1]:<10.2f}")
+    print(f"{'Wen–Yin Cayley':<25} {final_obj_wy:<15.6e} {final_feas_wy:<15.2e} {final_grad_wy:<15.2e} {len(H_wy['it']):<12} {H_wy['time'][-1]:<10.2f}")
+    print(f"{'RGD–QR':<25} {final_obj_rgd:<15.6e} {final_feas_rgd:<15.2e} {final_grad_rgd:<15.2e} {len(H_rgd['it']):<12} {H_rgd['time'][-1]:<10.2f}")
+    print("="*100)
 
     return (X_fast, H_fast), (X_dense, H_dense), (X_wy, H_wy), (X_rgd, H_rgd)
 
