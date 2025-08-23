@@ -126,6 +126,6 @@ experiments/
 results/
 logs/
 *.pdf
-!figs/*.pdf
+figs/
 temp/
 scratch/
