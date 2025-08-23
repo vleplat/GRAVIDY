@@ -27,7 +27,8 @@ def run_single_trial(problem, x_star, eta=30.0, max_iters=400, seed=0, tol_kkt=1
     
     results = {}
     
-    # Initial point (same for all methods)
+    # Initial point (same for all methods) - use fixed seed for reproducibility
+    np.random.seed(seed)
     x0 = np.maximum(np.random.randn(problem.n), 0.1)
     
     # GRAVIDY–pos
@@ -203,12 +204,9 @@ def plot_paper_results(all_results, stats, problem, x_star, f_star):
     method_names = ['GRAVIDY–pos (implicit Newton)', 'PGD+Nesterov', 
                    'Proj-BB (Armijo)', 'MU (A≥0,b≥0)']
     
-    # Determine common iteration and time grids
+    # Determine common iteration grid
     max_iters = max(len(all_results[0][method]['kkt']) for method in methods)
-    max_time = max(all_results[0][method]['times'][-1] for method in methods)
-    
     iter_grid = np.arange(max_iters)
-    time_grid = np.linspace(0, max_time, 100)
     
     # Interpolate trajectories to common grids and compute statistics
     iter_stats = {}
@@ -217,34 +215,41 @@ def plot_paper_results(all_results, stats, problem, x_star, f_star):
     for method in methods:
         # Iteration-based statistics
         kkt_matrix = np.full((len(all_results), max_iters), np.nan)
+        obj_matrix = np.full((len(all_results), max_iters), np.nan)
+        
         for trial, result in enumerate(all_results):
             kkt_traj = result[method]['kkt']
+            obj_traj = result[method]['objective']
             kkt_matrix[trial, :len(kkt_traj)] = kkt_traj
+            obj_matrix[trial, :len(obj_traj)] = obj_traj
         
         # Fill NaN with last value
         for trial in range(len(all_results)):
             mask = ~np.isnan(kkt_matrix[trial, :])
             if np.any(mask):
-                last_val = kkt_matrix[trial, mask][-1]
-                kkt_matrix[trial, ~mask] = last_val
+                last_kkt = kkt_matrix[trial, mask][-1]
+                last_obj = obj_matrix[trial, mask][-1]
+                kkt_matrix[trial, ~mask] = last_kkt
+                obj_matrix[trial, ~mask] = last_obj
         
         iter_stats[method] = {
             'kkt_mean': np.nanmean(kkt_matrix, axis=0),
-            'kkt_std': np.nanstd(kkt_matrix, axis=0)
-        }
-        
-        # Time-based statistics  
-        obj_matrix = np.full((len(all_results), len(time_grid)), np.nan)
-        for trial, result in enumerate(all_results):
-            times = result[method]['times']
-            objectives = result[method]['objective']
-            obj_interp = np.interp(time_grid, times, objectives)
-            obj_matrix[trial, :] = obj_interp
-        
-        time_stats[method] = {
+            'kkt_std': np.nanstd(kkt_matrix, axis=0),
             'obj_mean': np.nanmean(obj_matrix, axis=0),
             'obj_std': np.nanstd(obj_matrix, axis=0)
         }
+        
+        # Time-based statistics - use actual trajectory data
+        time_stats[method] = {
+            'times': [],
+            'objectives': []
+        }
+        
+        for trial, result in enumerate(all_results):
+            times = result[method]['times']
+            objectives = result[method]['objective']
+            time_stats[method]['times'].extend(times)
+            time_stats[method]['objectives'].extend(objectives)
     
     # Create plots
     plt.style.use('default')
@@ -273,23 +278,50 @@ def plot_paper_results(all_results, stats, problem, x_star, f_star):
     plt.savefig("figs/pos_err_vs_it.pdf", bbox_inches="tight")
     plt.show()
     
-    # Figure 2: Objective vs time
+    # Figure 2: Objective gap vs iterations
     plt.figure(figsize=(7, 5))
     for i, method in enumerate(methods):
-        mean_obj = time_stats[method]['obj_mean']
-        std_obj = time_stats[method]['obj_std']
+        mean_obj = iter_stats[method]['obj_mean']
+        std_obj = iter_stats[method]['obj_std']
         
-        plt.loglog(time_grid, np.abs(mean_obj - f_star + 1e-16), 
-                  color=colors[i], linestyle=linestyles[i], 
-                  linewidth=3, label=method_names[i])
-        plt.fill_between(time_grid, 
+        plt.semilogy(iter_grid, np.abs(mean_obj - f_star + 1e-16), 
+                    color=colors[i], linestyle=linestyles[i], 
+                    linewidth=3, label=method_names[i])
+        plt.fill_between(iter_grid, 
                         np.abs(mean_obj - std_obj - f_star + 1e-16),
                         np.abs(mean_obj + std_obj - f_star + 1e-16),
                         color=colors[i], alpha=0.2)
     
+    plt.xlabel('Iterations', fontweight='bold')
+    plt.ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
+    plt.title('Orthant (NNLS): objective gap vs iterations', fontweight='bold')
+    plt.grid(True, alpha=0.3, which='both', ls=':')
+    plt.legend()
+    plt.tight_layout()
+    
+    plt.savefig("figs/pos_f_vs_it.pdf", bbox_inches="tight")
+    plt.show()
+    
+    # Figure 3: Objective gap vs time
+    plt.figure(figsize=(7, 5))
+    for i, method in enumerate(methods):
+        # Plot individual trajectories from all trials
+        for trial, result in enumerate(all_results):
+            times = result[method]['times']
+            objectives = result[method]['objective']
+            
+            if trial == 0:  # Only label the first trial
+                plt.loglog(times, np.abs(np.array(objectives) - f_star + 1e-16), 
+                          color=colors[i], linestyle=linestyles[i], 
+                          linewidth=2, alpha=0.7, label=method_names[i])
+            else:
+                plt.loglog(times, np.abs(np.array(objectives) - f_star + 1e-16), 
+                          color=colors[i], linestyle=linestyles[i], 
+                          linewidth=1, alpha=0.3)
+    
     plt.xlabel('Time [seconds]', fontweight='bold')
     plt.ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
-    plt.title('Orthant (NNLS): objective vs time', fontweight='bold')
+    plt.title('Orthant (NNLS): objective gap vs time', fontweight='bold')
     plt.grid(True, alpha=0.3, which='both', ls=':')
     plt.legend()
     plt.tight_layout()
@@ -301,7 +333,7 @@ def plot_paper_results(all_results, stats, problem, x_star, f_star):
 if __name__ == "__main__":
     # Paper-grade benchmark
     all_results, stats, problem, x_star, f_star = run_multi_seed_benchmark(
-        n=120, m=120, density=0.15, eta=500.0, max_iters=400, 
+        n=120, m=120, density=0.15, eta=400.0, max_iters=400, 
         n_trials=10, tol_kkt=1e-6
     )
     

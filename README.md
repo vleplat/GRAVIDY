@@ -31,12 +31,24 @@ You should see something like `Python 3.8.x` or higher. If you get an error, dow
 
 ### 📥 Step 2: Download GRAVIDY
 
+**Option A: Using Git (recommended)**
 Open your terminal/command prompt and run:
 
 ```bash
-git clone https://github.com/your-username/GRAVIDY.git
+git clone https://github.com/vleplat/GRAVIDY.git
 cd GRAVIDY
 ```
+
+**Option B: Download ZIP file**
+If the git command fails or you don't have Git installed:
+1. Go to https://github.com/vleplat/GRAVIDY
+2. Click the green "Code" button
+3. Select "Download ZIP"
+4. Extract the ZIP file to your desired location
+5. Open terminal/command prompt and navigate to the extracted folder:
+   ```bash
+   cd GRAVIDY
+   ```
 
 ### 🐍 Step 3: Create a Virtual Environment (Recommended)
 
