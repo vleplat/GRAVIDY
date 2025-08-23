@@ -136,19 +136,10 @@ def plot_results(results):
         return np.array(iters), np.array(objs), np.array(grads), np.array(times)
     
     # Note: For simplicity, computing errors properly would require storing x trajectory
-    # Here we'll just use the final error for all points (approximation)
-    def compute_errors(hist, x_final):
-        return [np.linalg.norm(x_final - x_star) for _ in hist]
-    
     it_grav, f_grav, g_grav, t_grav = extract_arrays(results['gravidy_pos']['hist'])
     it_apgd, f_apgd, g_apgd, t_apgd = extract_arrays(results['apgd_pos']['hist'])
     it_bb, f_bb, g_bb, t_bb = extract_arrays(results['pgd_bb_pos']['hist'])
     it_mu, f_mu, g_mu, t_mu = extract_arrays(results['mu_pos']['hist'])
-    
-    err_grav = compute_errors(results['gravidy_pos']['hist'], results['gravidy_pos']['x'])
-    err_apgd = compute_errors(results['apgd_pos']['hist'], results['apgd_pos']['x'])
-    err_bb = compute_errors(results['pgd_bb_pos']['hist'], results['pgd_bb_pos']['x'])
-    err_mu = compute_errors(results['mu_pos']['hist'], results['mu_pos']['x'])
     
     # Set up plotting
     plt.style.use('default')
@@ -163,20 +154,8 @@ def plot_results(results):
     # Create plots
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
-    # Plot 1: Distance to optimum vs iterations
+    # Plot 1: Objective gap vs iterations
     ax = axes[0, 0]
-    ax.semilogy(it_grav, err_grav, 'r-', linewidth=3, label='GRAVIDY–pos (implicit Newton)')
-    ax.semilogy(it_apgd, err_apgd, 'b--', linewidth=3, label='PGD+Nesterov')
-    ax.semilogy(it_bb, err_bb, 'g:', linewidth=3, label='Proj-BB (Armijo)')
-    ax.semilogy(it_mu, err_mu, 'm-.', linewidth=3, label='MU (A≥0,b≥0)')
-    ax.set_xlabel('Iterations', fontweight='bold')
-    ax.set_ylabel(r'$\|x_k - x^*\|_2$', fontweight='bold')
-    ax.set_title('Distance to Optimum vs Iterations', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
-    
-    # Plot 2: Objective gap vs iterations  
-    ax = axes[0, 1]
     ax.semilogy(it_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–pos (implicit Newton)')
     ax.semilogy(it_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='PGD+Nesterov')
     ax.semilogy(it_bb, np.abs(f_bb - f_star), 'g:', linewidth=3, label='Proj-BB (Armijo)')
@@ -184,6 +163,18 @@ def plot_results(results):
     ax.set_xlabel('Iterations', fontweight='bold')
     ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
     ax.set_title('Objective Gap vs Iterations', fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
+    # Plot 2: Gradient norm vs iterations  
+    ax = axes[0, 1]
+    ax.semilogy(it_grav, g_grav, 'r-', linewidth=3, label='GRAVIDY–pos (implicit Newton)')
+    ax.semilogy(it_apgd, g_apgd, 'b--', linewidth=3, label='PGD+Nesterov')
+    ax.semilogy(it_bb, g_bb, 'g:', linewidth=3, label='Proj-BB (Armijo)')
+    ax.semilogy(it_mu, g_mu, 'm-.', linewidth=3, label='MU (A≥0,b≥0)')
+    ax.set_xlabel('Iterations', fontweight='bold')
+    ax.set_ylabel(r'$\|\nabla f(x_k)\|_2$', fontweight='bold')
+    ax.set_title('Gradient Norm vs Iterations', fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.legend()
     
@@ -232,18 +223,18 @@ def plot_results(results):
     
     # Create individual plots for systematic reporting
     
-    # Figure 1: Error vs iterations
+    # Figure 1: Objective gap vs iterations
     plt.figure(figsize=(7, 5))
-    plt.semilogy(it_grav, err_grav, 'r-', linewidth=3, label='GRAVIDY–pos (implicit Newton)')
-    plt.semilogy(it_apgd, err_apgd, 'b--', linewidth=3, label='PGD+Nesterov')
-    plt.semilogy(it_bb, err_bb, 'g:', linewidth=3, label='Proj-BB (Armijo)')
-    plt.semilogy(it_mu, err_mu, 'm-.', linewidth=3, label='MU (A≥0,b≥0)')
+    plt.semilogy(it_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–pos (implicit Newton)')
+    plt.semilogy(it_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='PGD+Nesterov')
+    plt.semilogy(it_bb, np.abs(f_bb - f_star), 'g:', linewidth=3, label='Proj-BB (Armijo)')
+    plt.semilogy(it_mu, np.abs(f_mu - f_star), 'm-.', linewidth=3, label='MU (A≥0,b≥0)')
     plt.xlabel('Iterations', fontweight='bold')
-    plt.ylabel(r'$\|x_k - x^*\|_2$', fontweight='bold')
-    plt.title('NNLS (positive): error', fontweight='bold')
+    plt.ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
+    plt.title('NNLS (positive): objective gap', fontweight='bold')
     plt.grid(True, alpha=0.3, which='both', ls=':')
     plt.legend()
-    plt.savefig("figs/pos_err_vs_it.pdf", bbox_inches="tight")
+    plt.savefig("figs/pos_f_vs_it.pdf", bbox_inches="tight")
     plt.show()
     
     # Figure 2: Objective vs time

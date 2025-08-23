@@ -144,22 +144,11 @@ def plot_results(results):
         times = [h[3] for h in hist]
         return np.array(iters), np.array(objs), np.array(grads), np.array(times)
     
-    # Note: For simplicity, computing errors properly would require storing x trajectory
-    # Here we'll just use the final error for all points (approximation)
-    def compute_errors(hist, x_final):
-        return [np.linalg.norm(x_final - x_star) for _ in hist]
-    
     it_kl, f_kl, g_kl, t_kl = extract_arrays(results['kl_prox']['hist'])
     it_mgn, f_mgn, g_mgn, t_mgn = extract_arrays(results['mgn_variant']['hist'])
     it_pgd, f_pgd, g_pgd, t_pgd = extract_arrays(results['pgd']['hist'])
     it_apgd, f_apgd, g_apgd, t_apgd = extract_arrays(results['apgd']['hist'])
     it_emd, f_emd, g_emd, t_emd = extract_arrays(results['emd']['hist'])
-    
-    err_kl = compute_errors(results['kl_prox']['hist'], results['kl_prox']['x'])
-    err_mgn = compute_errors(results['mgn_variant']['hist'], results['mgn_variant']['x'])
-    err_pgd = compute_errors(results['pgd']['hist'], results['pgd']['x'])
-    err_apgd = compute_errors(results['apgd']['hist'], results['apgd']['x'])
-    err_emd = compute_errors(results['emd']['hist'], results['emd']['x'])
     
     # Set up plotting
     plt.style.use('default')
@@ -174,21 +163,8 @@ def plot_results(results):
     # Create plots
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
-    # Plot 1: Distance to optimum vs iterations
+    # Plot 1: Objective gap vs iterations
     ax = axes[0, 0]
-    ax.semilogy(it_kl, err_kl, 'r-', linewidth=3, label='GRAVIDY–Δ (KL-prox)')
-    ax.semilogy(it_mgn, err_mgn, 'b--', linewidth=3, label='GRAVIDY–Δ (MGN variant)')
-    ax.semilogy(it_pgd, err_pgd, 'g:', linewidth=3, label='PGD (baseline)')
-    ax.semilogy(it_apgd, err_apgd, 'c-', linewidth=3, label='APGD (Nesterov)')
-    ax.semilogy(it_emd, err_emd, 'm-.', linewidth=3, label='EMD (baseline)')
-    ax.set_xlabel('Iterations', fontweight='bold')
-    ax.set_ylabel(r'$\|x_k - x^*\|_2$', fontweight='bold')
-    ax.set_title('Distance to Optimum vs Iterations', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
-    
-    # Plot 2: Objective gap vs iterations  
-    ax = axes[0, 1]
     ax.semilogy(it_kl, np.abs(f_kl - f_star), 'r-', linewidth=3, label='GRAVIDY–Δ (KL-prox)')
     ax.semilogy(it_mgn, np.abs(f_mgn - f_star), 'b--', linewidth=3, label='GRAVIDY–Δ (MGN variant)')
     ax.semilogy(it_pgd, np.abs(f_pgd - f_star), 'g:', linewidth=3, label='PGD (baseline)')
@@ -197,6 +173,19 @@ def plot_results(results):
     ax.set_xlabel('Iterations', fontweight='bold')
     ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
     ax.set_title('Objective Gap vs Iterations', fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
+    # Plot 2: Gradient norm vs iterations  
+    ax = axes[0, 1]
+    ax.semilogy(it_kl, g_kl, 'r-', linewidth=3, label='GRAVIDY–Δ (KL-prox)')
+    ax.semilogy(it_mgn, g_mgn, 'b--', linewidth=3, label='GRAVIDY–Δ (MGN variant)')
+    ax.semilogy(it_pgd, g_pgd, 'g:', linewidth=3, label='PGD (baseline)')
+    ax.semilogy(it_apgd, g_apgd, 'c-', linewidth=3, label='APGD (Nesterov)')
+    ax.semilogy(it_emd, g_emd, 'm-.', linewidth=3, label='EMD (baseline)')
+    ax.set_xlabel('Iterations', fontweight='bold')
+    ax.set_ylabel(r'$\|\nabla f(x_k)\|_2$', fontweight='bold')
+    ax.set_title('Gradient Norm vs Iterations', fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.legend()
     

@@ -264,11 +264,11 @@ To add your own optimization problem:
 If you use GRAVIDY in your research, please cite our paper:
 
 ```bibtex
-@article{gravidy2024,
+@article{gravidy2025,
   title={GRAVIDY: Geometric Optimization via Implicit Integration},
   author={Your Name and Co-authors},
   journal={Journal Name},
-  year={2024}
+  year={2025}
 }
 ```
 

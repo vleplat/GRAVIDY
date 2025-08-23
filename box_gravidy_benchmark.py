@@ -109,15 +109,8 @@ def plot_results(results):
         return np.array(iters), np.array(objs), np.array(grads), np.array(times)
     
     # Note: For simplicity, computing errors properly would require storing x trajectory
-    # Here we'll just use the final error for all points (approximation)
-    def compute_errors(hist, x_final):
-        return [np.linalg.norm(x_final - x_star) for _ in hist]
-    
     it_grav, f_grav, g_grav, t_grav = extract_arrays(results['gravidy_box']['hist'])
     it_apgd, f_apgd, g_apgd, t_apgd = extract_arrays(results['apgd_box']['hist'])
-    
-    err_grav = compute_errors(results['gravidy_box']['hist'], results['gravidy_box']['x'])
-    err_apgd = compute_errors(results['apgd_box']['hist'], results['apgd_box']['x'])
     
     # Set up plotting
     plt.style.use('default')
@@ -132,23 +125,23 @@ def plot_results(results):
     # Create plots
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
-    # Plot 1: Distance to optimum vs iterations
+    # Plot 1: Objective gap vs iterations
     ax = axes[0, 0]
-    ax.semilogy(it_grav, err_grav, 'r-', linewidth=3, label='GRAVIDY–box')
-    ax.semilogy(it_apgd, err_apgd, 'b--', linewidth=3, label='APGD-box (Nesterov)')
-    ax.set_xlabel('Iterations', fontweight='bold')
-    ax.set_ylabel(r'$\|x_k - x^*\|_2$', fontweight='bold')
-    ax.set_title('Distance to Optimum vs Iterations', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
-    
-    # Plot 2: Objective gap vs iterations  
-    ax = axes[0, 1]
     ax.semilogy(it_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–box')
     ax.semilogy(it_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='APGD-box (Nesterov)')
     ax.set_xlabel('Iterations', fontweight='bold')
     ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
     ax.set_title('Objective Gap vs Iterations', fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
+    # Plot 2: Gradient norm vs iterations  
+    ax = axes[0, 1]
+    ax.semilogy(it_grav, g_grav, 'r-', linewidth=3, label='GRAVIDY–box')
+    ax.semilogy(it_apgd, g_apgd, 'b--', linewidth=3, label='APGD-box (Nesterov)')
+    ax.set_xlabel('Iterations', fontweight='bold')
+    ax.set_ylabel(r'$\|\nabla f(x_k)\|_2$', fontweight='bold')
+    ax.set_title('Gradient Norm vs Iterations', fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.legend()
     
