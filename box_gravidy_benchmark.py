@@ -135,23 +135,23 @@ def plot_results(results):
     ax.grid(True, alpha=0.3)
     ax.legend()
     
-    # Plot 2: Gradient norm vs iterations  
+    # Plot 2: Objective gap vs time (loglog)
     ax = axes[0, 1]
-    ax.semilogy(it_grav, g_grav, 'r-', linewidth=3, label='GRAVIDY–box')
-    ax.semilogy(it_apgd, g_apgd, 'b--', linewidth=3, label='APGD-box (Nesterov)')
-    ax.set_xlabel('Iterations', fontweight='bold')
-    ax.set_ylabel(r'$\|\nabla f(x_k)\|_2$', fontweight='bold')
-    ax.set_title('Gradient Norm vs Iterations', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
-    
-    # Plot 3: Objective gap vs time (loglog)
-    ax = axes[1, 0]
     ax.loglog(t_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–box')
     ax.loglog(t_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='APGD-box (Nesterov)')
     ax.set_xlabel('Time [seconds]', fontweight='bold')
     ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
     ax.set_title('Objective Gap vs Time (loglog)', fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
+    # Plot 3: Gradient norm vs iterations (for reference)
+    ax = axes[1, 0]
+    ax.semilogy(it_grav, g_grav, 'r-', linewidth=3, label='GRAVIDY–box')
+    ax.semilogy(it_apgd, g_apgd, 'b--', linewidth=3, label='APGD-box (Nesterov)')
+    ax.set_xlabel('Iterations', fontweight='bold')
+    ax.set_ylabel(r'$\|\nabla f(x_k)\|_2$', fontweight='bold')
+    ax.set_title('Gradient Norm vs Iterations (reference)', fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.legend()
     

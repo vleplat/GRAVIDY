@@ -166,20 +166,8 @@ def plot_results(results):
     ax.grid(True, alpha=0.3)
     ax.legend()
     
-    # Plot 2: Gradient norm vs iterations  
+    # Plot 2: Objective gap vs time (loglog)
     ax = axes[0, 1]
-    ax.semilogy(it_grav, g_grav, 'r-', linewidth=3, label='GRAVIDY–pos (implicit Newton)')
-    ax.semilogy(it_apgd, g_apgd, 'b--', linewidth=3, label='PGD+Nesterov')
-    ax.semilogy(it_bb, g_bb, 'g:', linewidth=3, label='Proj-BB (Armijo)')
-    ax.semilogy(it_mu, g_mu, 'm-.', linewidth=3, label='MU (A≥0,b≥0)')
-    ax.set_xlabel('Iterations', fontweight='bold')
-    ax.set_ylabel(r'$\|\nabla f(x_k)\|_2$', fontweight='bold')
-    ax.set_title('Gradient Norm vs Iterations', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
-    
-    # Plot 3: Objective gap vs time (loglog)
-    ax = axes[1, 0]
     ax.loglog(t_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–pos (implicit Newton)')
     ax.loglog(t_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='PGD+Nesterov')
     ax.loglog(t_bb, np.abs(f_bb - f_star), 'g:', linewidth=3, label='Proj-BB (Armijo)')
@@ -187,6 +175,18 @@ def plot_results(results):
     ax.set_xlabel('Time [seconds]', fontweight='bold')
     ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
     ax.set_title('Objective Gap vs Time (loglog)', fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
+    # Plot 3: Gradient norm vs iterations (for reference)
+    ax = axes[1, 0]
+    ax.semilogy(it_grav, g_grav, 'r-', linewidth=3, label='GRAVIDY–pos (implicit Newton)')
+    ax.semilogy(it_apgd, g_apgd, 'b--', linewidth=3, label='PGD+Nesterov')
+    ax.semilogy(it_bb, g_bb, 'g:', linewidth=3, label='Proj-BB (Armijo)')
+    ax.semilogy(it_mu, g_mu, 'm-.', linewidth=3, label='MU (A≥0,b≥0)')
+    ax.set_xlabel('Iterations', fontweight='bold')
+    ax.set_ylabel(r'$\|\nabla f(x_k)\|_2$', fontweight='bold')
+    ax.set_title('Gradient Norm vs Iterations (reference)', fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.legend()
     

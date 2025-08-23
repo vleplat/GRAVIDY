@@ -176,21 +176,8 @@ def plot_results(results):
     ax.grid(True, alpha=0.3)
     ax.legend()
     
-    # Plot 2: Gradient norm vs iterations  
+    # Plot 2: Objective gap vs time (loglog)
     ax = axes[0, 1]
-    ax.semilogy(it_kl, g_kl, 'r-', linewidth=3, label='GRAVIDY–Δ (KL-prox)')
-    ax.semilogy(it_mgn, g_mgn, 'b--', linewidth=3, label='GRAVIDY–Δ (MGN variant)')
-    ax.semilogy(it_pgd, g_pgd, 'g:', linewidth=3, label='PGD (baseline)')
-    ax.semilogy(it_apgd, g_apgd, 'c-', linewidth=3, label='APGD (Nesterov)')
-    ax.semilogy(it_emd, g_emd, 'm-.', linewidth=3, label='EMD (baseline)')
-    ax.set_xlabel('Iterations', fontweight='bold')
-    ax.set_ylabel(r'$\|\nabla f(x_k)\|_2$', fontweight='bold')
-    ax.set_title('Gradient Norm vs Iterations', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
-    
-    # Plot 3: Objective gap vs time (loglog)
-    ax = axes[1, 0]
     ax.loglog(t_kl, np.abs(f_kl - f_star), 'r-', linewidth=3, label='GRAVIDY–Δ (KL-prox)')
     ax.loglog(t_mgn, np.abs(f_mgn - f_star), 'b--', linewidth=3, label='GRAVIDY–Δ (MGN variant)')
     ax.loglog(t_pgd, np.abs(f_pgd - f_star), 'g:', linewidth=3, label='PGD (baseline)')
@@ -199,6 +186,19 @@ def plot_results(results):
     ax.set_xlabel('Time [seconds]', fontweight='bold')
     ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
     ax.set_title('Objective Gap vs Time (loglog)', fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
+    # Plot 3: Gradient norm vs iterations (for reference)
+    ax = axes[1, 0]
+    ax.semilogy(it_kl, g_kl, 'r-', linewidth=3, label='GRAVIDY–Δ (KL-prox)')
+    ax.semilogy(it_mgn, g_mgn, 'b--', linewidth=3, label='GRAVIDY–Δ (MGN variant)')
+    ax.semilogy(it_pgd, g_pgd, 'g:', linewidth=3, label='PGD (baseline)')
+    ax.semilogy(it_apgd, g_apgd, 'c-', linewidth=3, label='APGD (Nesterov)')
+    ax.semilogy(it_emd, g_emd, 'm-.', linewidth=3, label='EMD (baseline)')
+    ax.set_xlabel('Iterations', fontweight='bold')
+    ax.set_ylabel(r'$\|\nabla f(x_k)\|_2$', fontweight='bold')
+    ax.set_title('Gradient Norm vs Iterations (reference)', fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.legend()
     
