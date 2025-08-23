@@ -135,42 +135,64 @@ def plot_results(results):
     ax.grid(True, alpha=0.3)
     ax.legend()
     
-    # Plot 2: Objective gap vs time (loglog)
+    # Plot 2: Final KKT residuals (bar chart)
     ax = axes[0, 1]
-    ax.loglog(t_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–box')
-    ax.loglog(t_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='APGD-box (Nesterov)')
-    ax.set_xlabel('Time [seconds]', fontweight='bold')
-    ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
-    ax.set_title('Objective Gap vs Time (loglog)', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
+    # Compute actual KKT residuals for final points
+    A, b = results['problem']['A'], results['problem']['b']
+    lo, hi = results['problem']['lo'], results['problem']['hi']
     
-    # Plot 3: Gradient norm vs iterations (for reference)
+    # For box constraints: project(x) = clip(x, lo, hi)
+    def compute_kkt_residual(x_final):
+        grad = A.T @ (A @ x_final - b)  # gradient of 0.5||Ax-b||^2
+        projected = np.clip(x_final - grad, lo, hi)  # project onto box
+        return np.linalg.norm(x_final - projected)
+    
+    kkt_values = [
+        compute_kkt_residual(results['gravidy_box']['x']),
+        compute_kkt_residual(results['apgd_box']['x'])
+    ]
+    
+    methods = ['GRAVIDY–box', 'APGD-box']
+    colors = ['red', 'blue']
+    
+    bars = ax.bar(methods, kkt_values, color=colors, alpha=0.8)
+    ax.set_ylabel(r'KKT residual $\|x - \Pi_C(x - \nabla f(x))\|_2$', fontweight='bold')
+    ax.set_title('Final KKT Residuals', fontweight='bold')
+    ax.grid(True, alpha=0.3, axis='y')
+    ax.set_yscale('log')
+    
+    # Add value labels on bars
+    for bar, value in zip(bars, kkt_values):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                f'{value:.2e}', ha='center', va='bottom', fontweight='bold')
+    
+    # Plot 3: Final solution comparison
     ax = axes[1, 0]
-    ax.semilogy(it_grav, g_grav, 'r-', linewidth=3, label='GRAVIDY–box')
-    ax.semilogy(it_apgd, g_apgd, 'b--', linewidth=3, label='APGD-box (Nesterov)')
-    ax.set_xlabel('Iterations', fontweight='bold')
-    ax.set_ylabel(r'$\|\nabla f(x_k)\|_2$', fontweight='bold')
-    ax.set_title('Gradient Norm vs Iterations (reference)', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
-    
-    # Plot 4: Final solution comparison
-    ax = axes[1, 1]
     n = len(x_star)
     indices = np.arange(n)
     width = 0.35
     
-    ax.bar(indices - width/2, results['gravidy_box']['x'], width, 
+    ax.bar(indices - width, results['gravidy_box']['x'], width, 
            label='GRAVIDY–box', alpha=0.8, color='red')
-    ax.bar(indices + width/2, results['apgd_box']['x'], width,
+    ax.bar(indices + width, results['apgd_box']['x'], width,
            label='APGD-box (Nesterov)', alpha=0.8, color='blue')
     ax.plot(indices, x_star, 'ko-', linewidth=2, markersize=4, 
             label=r'$x^*$ (true)', alpha=0.7)
     
     ax.set_xlabel('Component Index', fontweight='bold')
     ax.set_ylabel('Value', fontweight='bold')
-    ax.set_title('Final Solutions on Box Constraints', fontweight='bold')
+    ax.set_title('Final Solutions on Box', fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
+    # Plot 4: Objective gap vs time (loglog)
+    ax = axes[1, 1]
+    ax.loglog(t_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–box')
+    ax.loglog(t_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='APGD-box (Nesterov)')
+    ax.set_xlabel('Time [seconds]', fontweight='bold')
+    ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
+    ax.set_title('Objective Gap vs Time (loglog)', fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.legend()
     
@@ -184,31 +206,28 @@ def plot_results(results):
     
     # Create individual plots for systematic reporting
     
-    # Figure 1: Error vs iterations
+    # Figure 1: Objective gap vs iterations
     plt.figure(figsize=(7, 5))
-    err_grav = compute_errors(results['gravidy_box']['hist'], results['gravidy_box']['x'])
-    err_apgd = compute_errors(results['apgd_box']['hist'], results['apgd_box']['x'])
-    
     it_grav, f_grav, g_grav, t_grav = extract_arrays(results['gravidy_box']['hist'])
     it_apgd, f_apgd, g_apgd, t_apgd = extract_arrays(results['apgd_box']['hist'])
     
-    plt.semilogy(it_grav, err_grav, 'r-', linewidth=3, label='GRAVIDY–box')
-    plt.semilogy(it_apgd, err_apgd, 'b--', linewidth=3, label='APGD-box (Nesterov)')
+    plt.semilogy(it_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–box')
+    plt.semilogy(it_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='APGD-box (Nesterov)')
     plt.xlabel('Iterations', fontweight='bold')
-    plt.ylabel(r'$\|x_k - x^*\|_2$', fontweight='bold')
-    plt.title('Box: error vs iterations', fontweight='bold')
+    plt.ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
+    plt.title('Box: objective gap vs iterations', fontweight='bold')
     plt.grid(True, alpha=0.3, which='both', ls=':')
     plt.legend()
     plt.savefig("figs/box_err_vs_it.pdf", bbox_inches="tight")
     plt.show()
     
-    # Figure 2: Objective vs time
+    # Figure 2: Objective gap vs time
     plt.figure(figsize=(7, 5))
     plt.loglog(t_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–box')
     plt.loglog(t_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='APGD-box (Nesterov)')
     plt.xlabel('Time [seconds]', fontweight='bold')
     plt.ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
-    plt.title('Box: objective vs time', fontweight='bold')
+    plt.title('Box: objective gap vs time', fontweight='bold')
     plt.grid(True, alpha=0.3, which='both', ls=':')
     plt.legend()
     plt.savefig("figs/box_f_vs_time.pdf", bbox_inches="tight")

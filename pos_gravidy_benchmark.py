@@ -166,32 +166,41 @@ def plot_results(results):
     ax.grid(True, alpha=0.3)
     ax.legend()
     
-    # Plot 2: Objective gap vs time (loglog)
+    # Plot 2: Final KKT residuals (bar chart)
     ax = axes[0, 1]
-    ax.loglog(t_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–pos (implicit Newton)')
-    ax.loglog(t_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='PGD+Nesterov')
-    ax.loglog(t_bb, np.abs(f_bb - f_star), 'g:', linewidth=3, label='Proj-BB (Armijo)')
-    ax.loglog(t_mu, np.abs(f_mu - f_star), 'm-.', linewidth=3, label='MU (A≥0,b≥0)')
-    ax.set_xlabel('Time [seconds]', fontweight='bold')
-    ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
-    ax.set_title('Objective Gap vs Time (loglog)', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
+    # Compute actual KKT residuals for final points
+    A, b = results['problem']['A'], results['problem']['b']
     
-    # Plot 3: Gradient norm vs iterations (for reference)
+    # For positive orthant: project(x) = max(0, x)
+    def compute_kkt_residual(x_final):
+        grad = A.T @ (A @ x_final - b)  # gradient of 0.5||Ax-b||^2
+        projected = np.maximum(0, x_final - grad)  # project onto positive orthant
+        return np.linalg.norm(x_final - projected)
+    
+    kkt_values = [
+        compute_kkt_residual(results['gravidy_pos']['x']),
+        compute_kkt_residual(results['apgd_pos']['x']),
+        compute_kkt_residual(results['pgd_bb_pos']['x']),
+        compute_kkt_residual(results['mu_pos']['x'])
+    ]
+    
+    methods = ['GRAVIDY–pos', 'PGD+Nesterov', 'Proj-BB', 'MU']
+    colors = ['red', 'blue', 'green', 'magenta']
+    
+    bars = ax.bar(methods, kkt_values, color=colors, alpha=0.8)
+    ax.set_ylabel(r'KKT residual $\|x - \Pi_C(x - \nabla f(x))\|_2$', fontweight='bold')
+    ax.set_title('Final KKT Residuals', fontweight='bold')
+    ax.grid(True, alpha=0.3, axis='y')
+    ax.set_yscale('log')
+    
+    # Add value labels on bars
+    for bar, value in zip(bars, kkt_values):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                f'{value:.2e}', ha='center', va='bottom', fontweight='bold')
+    
+    # Plot 3: Final solution comparison
     ax = axes[1, 0]
-    ax.semilogy(it_grav, g_grav, 'r-', linewidth=3, label='GRAVIDY–pos (implicit Newton)')
-    ax.semilogy(it_apgd, g_apgd, 'b--', linewidth=3, label='PGD+Nesterov')
-    ax.semilogy(it_bb, g_bb, 'g:', linewidth=3, label='Proj-BB (Armijo)')
-    ax.semilogy(it_mu, g_mu, 'm-.', linewidth=3, label='MU (A≥0,b≥0)')
-    ax.set_xlabel('Iterations', fontweight='bold')
-    ax.set_ylabel(r'$\|\nabla f(x_k)\|_2$', fontweight='bold')
-    ax.set_title('Gradient Norm vs Iterations (reference)', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
-    
-    # Plot 4: Final solution comparison
-    ax = axes[1, 1]
     n = len(x_star)
     indices = np.arange(n)
     width = 0.2
@@ -210,6 +219,18 @@ def plot_results(results):
     ax.set_xlabel('Component Index', fontweight='bold')
     ax.set_ylabel('Value', fontweight='bold')
     ax.set_title('Final Solutions on Positive Orthant', fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
+    # Plot 4: Objective gap vs time (loglog)
+    ax = axes[1, 1]
+    ax.loglog(t_grav, np.abs(f_grav - f_star), 'r-', linewidth=3, label='GRAVIDY–pos (implicit Newton)')
+    ax.loglog(t_apgd, np.abs(f_apgd - f_star), 'b--', linewidth=3, label='PGD+Nesterov')
+    ax.loglog(t_bb, np.abs(f_bb - f_star), 'g:', linewidth=3, label='Proj-BB (Armijo)')
+    ax.loglog(t_mu, np.abs(f_mu - f_star), 'm-.', linewidth=3, label='MU (A≥0,b≥0)')
+    ax.set_xlabel('Time [seconds]', fontweight='bold')
+    ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
+    ax.set_title('Objective Gap vs Time (loglog)', fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.legend()
     
@@ -254,7 +275,7 @@ def plot_results(results):
 
 if __name__ == "__main__":
     # Test multiple eta values
-    eta_values = [10.0, 30.0, 50.0, 100.0, 200.0]
+    eta_values = [10.0, 30.0, 50.0, 100.0, 200.0, 300.0]
     
     print("Testing GRAVIDY–pos with different eta values:")
     print("=" * 60)

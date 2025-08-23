@@ -176,34 +176,50 @@ def plot_results(results):
     ax.grid(True, alpha=0.3)
     ax.legend()
     
-    # Plot 2: Objective gap vs time (loglog)
+    # Plot 2: Final KKT residuals (bar chart)
     ax = axes[0, 1]
-    ax.loglog(t_kl, np.abs(f_kl - f_star), 'r-', linewidth=3, label='GRAVIDY–Δ (KL-prox)')
-    ax.loglog(t_mgn, np.abs(f_mgn - f_star), 'b--', linewidth=3, label='GRAVIDY–Δ (MGN variant)')
-    ax.loglog(t_pgd, np.abs(f_pgd - f_star), 'g:', linewidth=3, label='PGD (baseline)')
-    ax.loglog(t_apgd, np.abs(f_apgd - f_star), 'c-', linewidth=3, label='APGD (Nesterov)')
-    ax.loglog(t_emd, np.abs(f_emd - f_star), 'm-.', linewidth=3, label='EMD (baseline)')
-    ax.set_xlabel('Time [seconds]', fontweight='bold')
-    ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
-    ax.set_title('Objective Gap vs Time (loglog)', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
+    # Compute actual KKT residuals for final points
+    A, b = results['problem']['A'], results['problem']['b']
     
-    # Plot 3: Gradient norm vs iterations (for reference)
+    # For simplex: project(x) = proj_simplex(x)
+    def proj_simplex(v):
+        n = v.size
+        u = np.sort(v)[::-1]
+        cssv = np.cumsum(u)
+        rho = np.nonzero(u * np.arange(1, n+1) > (cssv - 1))[0][-1]
+        theta = (cssv[rho] - 1.0) / (rho + 1)
+        return np.maximum(v - theta, 0.0)
+    
+    def compute_kkt_residual(x_final):
+        grad = A.T @ (A @ x_final - b)  # gradient of 0.5||Ax-b||^2
+        projected = proj_simplex(x_final - grad)  # project onto simplex
+        return np.linalg.norm(x_final - projected)
+    
+    kkt_values = [
+        compute_kkt_residual(results['kl_prox']['x']),
+        compute_kkt_residual(results['mgn_variant']['x']),
+        compute_kkt_residual(results['pgd']['x']),
+        compute_kkt_residual(results['apgd']['x']),
+        compute_kkt_residual(results['emd']['x'])
+    ]
+    
+    methods = ['KL-prox', 'MGN', 'PGD', 'APGD', 'EMD']
+    colors = ['red', 'blue', 'green', 'cyan', 'magenta']
+    
+    bars = ax.bar(methods, kkt_values, color=colors, alpha=0.8)
+    ax.set_ylabel(r'KKT residual $\|x - \Pi_C(x - \nabla f(x))\|_2$', fontweight='bold')
+    ax.set_title('Final KKT Residuals', fontweight='bold')
+    ax.grid(True, alpha=0.3, axis='y')
+    ax.set_yscale('log')
+    
+    # Add value labels on bars
+    for bar, value in zip(bars, kkt_values):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                f'{value:.2e}', ha='center', va='bottom', fontweight='bold', rotation=45)
+    
+    # Plot 3: Final solution comparison
     ax = axes[1, 0]
-    ax.semilogy(it_kl, g_kl, 'r-', linewidth=3, label='GRAVIDY–Δ (KL-prox)')
-    ax.semilogy(it_mgn, g_mgn, 'b--', linewidth=3, label='GRAVIDY–Δ (MGN variant)')
-    ax.semilogy(it_pgd, g_pgd, 'g:', linewidth=3, label='PGD (baseline)')
-    ax.semilogy(it_apgd, g_apgd, 'c-', linewidth=3, label='APGD (Nesterov)')
-    ax.semilogy(it_emd, g_emd, 'm-.', linewidth=3, label='EMD (baseline)')
-    ax.set_xlabel('Iterations', fontweight='bold')
-    ax.set_ylabel(r'$\|\nabla f(x_k)\|_2$', fontweight='bold')
-    ax.set_title('Gradient Norm vs Iterations (reference)', fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
-    
-    # Plot 4: Final solution comparison
-    ax = axes[1, 1]
     n = len(x_star)
     indices = np.arange(n)
     width = 0.15
@@ -227,6 +243,19 @@ def plot_results(results):
     ax.grid(True, alpha=0.3)
     ax.legend()
     
+    # Plot 4: Objective gap vs time (loglog)
+    ax = axes[1, 1]
+    ax.loglog(t_kl, np.abs(f_kl - f_star), 'r-', linewidth=3, label='GRAVIDY–Δ (KL-prox)')
+    ax.loglog(t_mgn, np.abs(f_mgn - f_star), 'b--', linewidth=3, label='GRAVIDY–Δ (MGN variant)')
+    ax.loglog(t_pgd, np.abs(f_pgd - f_star), 'g:', linewidth=3, label='PGD (baseline)')
+    ax.loglog(t_apgd, np.abs(f_apgd - f_star), 'c-', linewidth=3, label='APGD (Nesterov)')
+    ax.loglog(t_emd, np.abs(f_emd - f_star), 'm-.', linewidth=3, label='EMD (baseline)')
+    ax.set_xlabel('Time [seconds]', fontweight='bold')
+    ax.set_ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
+    ax.set_title('Objective Gap vs Time (loglog)', fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
     plt.tight_layout()
     
     # Save figures for LaTeX
@@ -237,34 +266,28 @@ def plot_results(results):
     
     # Create individual plots for systematic reporting
     
-    # Figure 1: Error vs iterations
+    # Figure 1: Objective gap vs iterations
     plt.figure(figsize=(7, 5))
-    err_kl = compute_errors(results['kl_prox']['hist'], results['kl_prox']['x'])
-    err_mgn = compute_errors(results['mgn_variant']['hist'], results['mgn_variant']['x'])
-    err_pgd = compute_errors(results['pgd']['hist'], results['pgd']['x'])
-    err_apgd = compute_errors(results['apgd']['hist'], results['apgd']['x'])
-    err_emd = compute_errors(results['emd']['hist'], results['emd']['x'])
-    
     it_kl, f_kl, g_kl, t_kl = extract_arrays(results['kl_prox']['hist'])
     it_mgn, f_mgn, g_mgn, t_mgn = extract_arrays(results['mgn_variant']['hist'])
     it_pgd, f_pgd, g_pgd, t_pgd = extract_arrays(results['pgd']['hist'])
     it_apgd, f_apgd, g_apgd, t_apgd = extract_arrays(results['apgd']['hist'])
     it_emd, f_emd, g_emd, t_emd = extract_arrays(results['emd']['hist'])
     
-    plt.semilogy(it_kl, err_kl, 'r-', linewidth=3, label='GRAVIDY–Δ (KL-prox)')
-    plt.semilogy(it_mgn, err_mgn, 'b--', linewidth=3, label='GRAVIDY–Δ (MGN variant)')
-    plt.semilogy(it_pgd, err_pgd, 'g:', linewidth=3, label='PGD (baseline)')
-    plt.semilogy(it_apgd, err_apgd, 'c-', linewidth=3, label='APGD (Nesterov)')
-    plt.semilogy(it_emd, err_emd, 'm-.', linewidth=3, label='EMD (baseline)')
+    plt.semilogy(it_kl, np.abs(f_kl - f_star), 'r-', linewidth=3, label='GRAVIDY–Δ (KL-prox)')
+    plt.semilogy(it_mgn, np.abs(f_mgn - f_star), 'b--', linewidth=3, label='GRAVIDY–Δ (MGN variant)')
+    plt.semilogy(it_pgd, np.abs(f_pgd - f_star), 'g:', linewidth=3, label='PGD (baseline)')
+    plt.semilogy(it_apgd, np.abs(f_apgd - f_star), 'c-', linewidth=3, label='APGD (Nesterov)')
+    plt.semilogy(it_emd, np.abs(f_emd - f_star), 'm-.', linewidth=3, label='EMD (baseline)')
     plt.xlabel('Iterations', fontweight='bold')
-    plt.ylabel(r'$\|x_k - x^*\|_2$', fontweight='bold')
-    plt.title('Simplex: error vs iterations', fontweight='bold')
+    plt.ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
+    plt.title('Simplex: objective gap vs iterations', fontweight='bold')
     plt.grid(True, alpha=0.3, which='both', ls=':')
     plt.legend()
     plt.savefig("figs/simplex_err_vs_it.pdf", bbox_inches="tight")
     plt.show()
     
-    # Figure 2: Objective vs time
+    # Figure 2: Objective gap vs time
     plt.figure(figsize=(7, 5))
     plt.loglog(t_kl, np.abs(f_kl - f_star), 'r-', linewidth=3, label='GRAVIDY–Δ (KL-prox)')
     plt.loglog(t_mgn, np.abs(f_mgn - f_star), 'b--', linewidth=3, label='GRAVIDY–Δ (MGN variant)')
@@ -273,7 +296,7 @@ def plot_results(results):
     plt.loglog(t_emd, np.abs(f_emd - f_star), 'm-.', linewidth=3, label='EMD (baseline)')
     plt.xlabel('Time [seconds]', fontweight='bold')
     plt.ylabel(r'$|f(x_k) - f^*|$', fontweight='bold')
-    plt.title('Simplex: objective vs time', fontweight='bold')
+    plt.title('Simplex: objective gap vs time', fontweight='bold')
     plt.grid(True, alpha=0.3, which='both', ls=':')
     plt.legend()
     plt.savefig("figs/simplex_f_vs_time.pdf", bbox_inches="tight")

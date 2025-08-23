@@ -269,6 +269,43 @@ def plot_paper_results(all_results, stats, problem, x_star, f_star):
     
     plt.savefig("figs/box_f_vs_it.pdf", bbox_inches="tight")
     plt.show()
+    
+    # Figure 4: Final KKT residuals (bar chart across all trials)
+    plt.figure(figsize=(8, 6))
+    
+    # Compute final KKT residuals for each method across all trials
+    final_kkt_values = []
+    final_kkt_std = []
+    
+    for method in methods:
+        kkt_finals = []
+        for trial, result in enumerate(all_results):
+            kkt_traj = result[method]['kkt']
+            if len(kkt_traj) > 0:
+                kkt_finals.append(kkt_traj[-1])  # Final KKT value
+        
+        final_kkt_values.append(np.mean(kkt_finals))
+        final_kkt_std.append(np.std(kkt_finals))
+    
+    # Create bar chart
+    bars = plt.bar(method_names, final_kkt_values, yerr=final_kkt_std, 
+                   color=colors, alpha=0.8, capsize=5)
+    plt.ylabel(r'Final KKT residual $\|x - \Pi_C(x - \nabla f(x))\|_2$', fontweight='bold')
+    plt.title('Box: Final KKT Residuals (10 trials)', fontweight='bold')
+    plt.grid(True, alpha=0.3, axis='y')
+    plt.yscale('log')
+    plt.xticks(rotation=45, ha='right')
+    
+    # Add value labels on bars
+    for bar, value, std_val in zip(bars, final_kkt_values, final_kkt_std):
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height,
+                f'{value:.2e}\n±{std_val:.2e}', ha='center', va='bottom', 
+                fontweight='bold', fontsize=9)
+    
+    plt.tight_layout()
+    plt.savefig("figs/box_final_kkt.pdf", bbox_inches="tight")
+    plt.show()
 
 
 if __name__ == "__main__":
