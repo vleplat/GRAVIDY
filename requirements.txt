@@ -1,0 +1,10 @@
+# Core scientific computing libraries
+numpy>=1.20.0,<2.0.0
+scipy>=1.7.0,<2.0.0
+
+# Visualization
+matplotlib>=3.3.0,<4.0.0
+
+# Optional: For better performance (uncomment if needed)
+# numba>=0.56.0  # For JIT compilation
+# cupy>=10.0.0   # For GPU acceleration (requires CUDA)
