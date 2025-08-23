@@ -6,10 +6,9 @@ import matplotlib.pyplot as plt
 # Import utilities and solvers
 from utils.stiefel_utils import rand_stiefel
 from utils.objective import StiefelQuad
-from solver.gravidy_st_nr_dense import ICS_gravidy_NR_dense
+from solver.gravidy_st_nr_dense import ICS_NR_dense_fast
 from solver.gravidy_st_nk import ICS_gravidy_NK
 from solver.gravidy_st_fast import ICS_gravidy_fast
-from solver.gravidy_st_nr_dense import ICS_gravidy_NR_dense
 from solver.wy_cayley import WY_cayley
 from solver.rgd_qr import RGD_QR
 
@@ -58,8 +57,8 @@ def run_benchmark(n=300, p=5, cond=50.0, seed=0,
     # Run solvers
     print("Running Fast ICS...")
     X_fast, H_fast = ICS_gravidy_fast(prob, X0, alpha0=alpha0_fast, max_outer=100, tol_grad=1e-6, verbose=verbose)
-    print("Running NR-Dense...")
-    X_dense, H_dense = ICS_gravidy_NR_dense(prob, X0, alpha0=alpha0_fast, max_outer=100, tol_grad=1e-6, verbose=verbose)
+    print("Running NR-Dense (Optimized)...")
+    X_dense, H_dense = ICS_NR_dense_fast(prob, X0, alpha0=alpha0_fast, max_outer=100, tol_grad=1e-6, verbose=verbose)
     print("Running Wen-Yin Cayley...")
     X_wy, H_wy = WY_cayley(prob, X0, alpha0=alpha0_wy, max_iters=50000, verbose=verbose)
     print("Running RGD-QR...")
@@ -112,7 +111,7 @@ def run_benchmark(n=300, p=5, cond=50.0, seed=0,
     plt.loglog(H_dense["it"], H_dense["f"], 
                color=colors[1], marker=markers[1], markevery=max(1, len(H_dense["it"])//20),
                linestyle=line_styles[1], linewidth=3, markersize=6,
-               label="GRAVIDY–St (NR-Dense)")
+               label="GRAVIDY–St (NR-Dense Fast)")
     plt.loglog(H_wy["it"], H_wy["f"], 
                color=colors[2], marker=markers[2], markevery=max(1, len(H_wy["it"])//20),
                linestyle=line_styles[2], linewidth=3, markersize=6,
@@ -138,7 +137,7 @@ def run_benchmark(n=300, p=5, cond=50.0, seed=0,
     plt.loglog(H_dense["time"], H_dense["f"], 
                color=colors[1], marker=markers[1], markevery=max(1, len(H_dense["time"])//20),
                linestyle=line_styles[1], linewidth=3, markersize=6,
-               label="GRAVIDY–St (NR-Dense)")
+               label="GRAVIDY–St (NR-Dense Fast)")
     plt.loglog(H_wy["time"], H_wy["f"], 
                color=colors[2], marker=markers[2], markevery=max(1, len(H_wy["time"])//20),
                linestyle=line_styles[2], linewidth=3, markersize=6,
@@ -164,7 +163,7 @@ def run_benchmark(n=300, p=5, cond=50.0, seed=0,
     plt.semilogy(H_dense["it"], H_dense["feas"], 
                color=colors[1], marker=markers[1], markevery=max(1, len(H_dense["it"])//20),
                linestyle=line_styles[1], linewidth=3, markersize=6,
-               label="GRAVIDY–St (NR-Dense)")
+               label="GRAVIDY–St (NR-Dense Fast)")
     plt.semilogy(H_wy["it"], H_wy["feas"], 
                color=colors[2], marker=markers[2], markevery=max(1, len(H_wy["it"])//20),
                linestyle=line_styles[2], linewidth=3, markersize=6,
@@ -190,7 +189,7 @@ def run_benchmark(n=300, p=5, cond=50.0, seed=0,
     plt.semilogy(H_dense["time"], H_dense["feas"], 
                color=colors[1], marker=markers[1], markevery=max(1, len(H_dense["time"])//20),
                linestyle=line_styles[1], linewidth=3, markersize=6,
-               label="GRAVIDY–St (NR-Dense)")
+               label="GRAVIDY–St (NR-Dense Fast)")
     plt.semilogy(H_wy["time"], H_wy["feas"], 
                color=colors[2], marker=markers[2], markevery=max(1, len(H_wy["time"])//20),
                linestyle=line_styles[2], linewidth=3, markersize=6,
@@ -221,7 +220,7 @@ def run_benchmark(n=300, p=5, cond=50.0, seed=0,
     plt.semilogy(H_fast["it"], H_fast["feas"], color=colors[0], linestyle=line_styles[0], 
                 linewidth=3, label='GRAVIDY–St (Fast)')
     plt.semilogy(H_dense["it"], H_dense["feas"], color=colors[1], linestyle=line_styles[1], 
-                linewidth=3, label='GRAVIDY–St (NR-Dense)')
+                linewidth=3, label='GRAVIDY–St (NR-Dense Fast)')
     plt.semilogy(H_wy["it"], H_wy["feas"], color=colors[2], linestyle=line_styles[2], 
                 linewidth=3, label='Wen–Yin Cayley')
     plt.semilogy(H_rgd["it"], H_rgd["feas"], color=colors[3], linestyle=line_styles[3], 
@@ -239,7 +238,7 @@ def run_benchmark(n=300, p=5, cond=50.0, seed=0,
     plt.semilogy(H_fast["time"], H_fast["f"], color=colors[0], linestyle=line_styles[0], 
                 linewidth=3, label='GRAVIDY–St (Fast)')
     plt.semilogy(H_dense["time"], H_dense["f"], color=colors[1], linestyle=line_styles[1], 
-                linewidth=3, label='GRAVIDY–St (NR-Dense)')
+                linewidth=3, label='GRAVIDY–St (NR-Dense Fast)')
     plt.semilogy(H_wy["time"], H_wy["f"], color=colors[2], linestyle=line_styles[2], 
                 linewidth=3, label='Wen–Yin Cayley')
     plt.semilogy(H_rgd["time"], H_rgd["f"], color=colors[3], linestyle=line_styles[3], 
@@ -277,7 +276,7 @@ def run_benchmark(n=300, p=5, cond=50.0, seed=0,
     print(f"{'Solver':<25} {'Final Obj':<15} {'Final Feas':<15} {'Final Grad':<15} {'Iterations':<12} {'Time [s]':<10}")
     print("-" * 100)
     print(f"{'GRAVIDY–St (Fast)':<25} {final_obj_fast:<15.6e} {final_feas_fast:<15.2e} {final_grad_fast:<15.2e} {len(H_fast['it']):<12} {H_fast['time'][-1]:<10.2f}")
-    print(f"{'GRAVIDY–St (NR-Dense)':<25} {final_obj_dense:<15.6e} {final_feas_dense:<15.2e} {final_grad_dense:<15.2e} {len(H_dense['it']):<12} {H_dense['time'][-1]:<10.2f}")
+    print(f"{'GRAVIDY–St (NR-Dense Fast)':<25} {final_obj_dense:<15.6e} {final_feas_dense:<15.2e} {final_grad_dense:<15.2e} {len(H_dense['it']):<12} {H_dense['time'][-1]:<10.2f}")
     print(f"{'Wen–Yin Cayley':<25} {final_obj_wy:<15.6e} {final_feas_wy:<15.2e} {final_grad_wy:<15.2e} {len(H_wy['it']):<12} {H_wy['time'][-1]:<10.2f}")
     print(f"{'RGD–QR':<25} {final_obj_rgd:<15.6e} {final_feas_rgd:<15.2e} {final_grad_rgd:<15.2e} {len(H_rgd['it']):<12} {H_rgd['time'][-1]:<10.2f}")
     print("="*100)

@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from utils.stiefel_utils import rand_stiefel
 from utils.objective import StiefelQuad
 from solver.gravidy_st_fast import ICS_gravidy_fast
-from solver.gravidy_st_nr_dense import ICS_gravidy_NR_dense
+from solver.gravidy_st_nr_dense import ICS_NR_dense_fast
 from solver.wy_cayley import WY_cayley
 from solver.rgd_qr import RGD_QR
 
@@ -91,7 +91,38 @@ def run_single_trial(prob, n, p, seed=0, max_outer=100, max_iters=50000, tol_gra
         'converged': grad_norms_fast[-1] <= tol_grad
     }
     
-
+    # GRAVIDY–St (NR-Dense Fast)
+    start_time = time.perf_counter()
+    X_dense, H_dense = ICS_NR_dense_fast(prob, X0, alpha0=alpha0_dense, max_outer=max_outer, 
+                                         tol_grad=tol_grad, verbose=False)
+    time_dense = time.perf_counter() - start_time
+    
+    # Extract trajectories with gradient norms and feasibility
+    grad_norms_dense = []
+    feasibility_dense = []
+    objectives_dense = []
+    times_dense = []
+    
+    for h in H_dense:
+        it, obj, grad_norm, feas = h[0], h[1], h[2], h[3]
+        grad_norms_dense.append(grad_norm)
+        feasibility_dense.append(feas)
+        objectives_dense.append(obj)
+        if len(h) > 4:  # Dense solver has time in position 4
+            times_dense.append(h[4])
+        else:
+            times_dense.append(it * time_dense / len(H_dense))  # Approximate timing
+    
+    results['gravidy_dense'] = {
+        'grad_norm': grad_norms_dense,
+        'feasibility': feasibility_dense,
+        'objective': objectives_dense,
+        'times': times_dense,
+        'final_obj': objectives_dense[-1],
+        'final_feas': feasibility_dense[-1],
+        'final_grad': grad_norms_dense[-1],
+        'converged': grad_norms_dense[-1] <= tol_grad
+    }
     
     # Wen-Yin Cayley
     start_time = time.perf_counter()
