@@ -169,7 +169,7 @@ def run_multi_seed_benchmark(n=200, p=2, cond=50.0, max_outer=1000, max_iters=50
         final_obj = [r[method]['final_obj'] for r in all_results]
         final_feas = [r[method]['final_feas'] for r in all_results]
         final_grad = [r[method]['final_grad'] for r in all_results]
-        converged = [r[method]['converged'] for r in all_results]
+        runtimes = [r[method]['times'][-1] for r in all_results]  # Final runtime
         
         stats[method] = {
             'name': method_names[i],
@@ -179,21 +179,22 @@ def run_multi_seed_benchmark(n=200, p=2, cond=50.0, max_outer=1000, max_iters=50
             'final_feas_std': np.std(final_feas),
             'final_grad_mean': np.mean(final_grad),
             'final_grad_std': np.std(final_grad),
-            'convergence_rate': np.mean(converged)
+            'runtime_mean': np.mean(runtimes),
+            'runtime_std': np.std(runtimes)
         }
     
     # Print summary
     print("\n" + "="*90)
     print("BENCHMARK SUMMARY (averaged over {} trials)".format(n_trials))
     print("="*90)
-    print(f"{'Method':<25} {'Final Obj':<15} {'Final Feas':<15} {'Final Grad':<15} {'Conv. rate':<10}")
-    print("-" * 90)
+    print(f"{'Method':<25} {'Final Obj':<15} {'Final Feas':<15} {'Final Grad':<15} {'Runtime [s]':<15}")
+    print("-" * 105)
     for method in methods:
         s = stats[method]
         print(f"{s['name']:<25} {s['final_obj_mean']:<7.3e}±{s['final_obj_std']:<6.2e} "
               f"{s['final_feas_mean']:<7.3e}±{s['final_feas_std']:<6.2e} "
-              f"{s['final_grad_mean']:<7.3e}±{s['final_grad_std']:<6.2e} {s['convergence_rate']:<10.2f}")
-    print("="*90)
+              f"{s['final_grad_mean']:<7.3e}±{s['final_grad_std']:<6.2e} {s['runtime_mean']:<7.3f}±{s['runtime_std']:<6.2f}")
+    print("="*105)
     
     return all_results, stats, prob
 
@@ -371,7 +372,7 @@ if __name__ == "__main__":
     # Paper-grade benchmark
     all_results, stats, prob = run_multi_seed_benchmark(
         n=100, p=2, cond=1000.0, max_outer=500, max_iters=50000, 
-        n_trials=10, tol_grad=1e-6
+        n_trials=10, tol_grad=1e-5
     )
     
     # Create paper plots

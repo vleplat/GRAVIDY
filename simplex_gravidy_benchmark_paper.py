@@ -186,7 +186,8 @@ def run_multi_seed_benchmark(n=40, m=40, cond=5.0, eta=50.0, max_iters=400,
         # Collect final metrics
         final_errors = [r[method]['final_error'] for r in all_results]
         final_kkt = [r[method]['final_kkt'] for r in all_results]
-        converged = [r[method]['converged'] for r in all_results]
+        final_objectives = [r[method]['objective'][-1] for r in all_results]  # Final objective value
+        runtimes = [r[method]['times'][-1] for r in all_results]  # Final runtime
         
         stats[method] = {
             'name': method_names[i],
@@ -194,20 +195,24 @@ def run_multi_seed_benchmark(n=40, m=40, cond=5.0, eta=50.0, max_iters=400,
             'final_error_std': np.std(final_errors),
             'final_kkt_mean': np.mean(final_kkt),
             'final_kkt_std': np.std(final_kkt),
-            'convergence_rate': np.mean(converged)
+            'final_obj_mean': np.mean(final_objectives),
+            'final_obj_std': np.std(final_objectives),
+            'runtime_mean': np.mean(runtimes),
+            'runtime_std': np.std(runtimes)
         }
     
     # Print summary
     print("\n" + "="*80)
     print("BENCHMARK SUMMARY (averaged over {} trials)".format(n_trials))
     print("="*80)
-    print(f"{'Method':<25} {'||x-x*||_2':<15} {'KKT residual':<15} {'Conv. rate':<10}")
-    print("-" * 80)
+    print(f"{'Method':<25} {'||x-x*||_2':<15} {'KKT residual':<15} {'Final obj':<15} {'Runtime [s]':<15}")
+    print("-" * 95)
     for method in methods:
         s = stats[method]
         print(f"{s['name']:<25} {s['final_error_mean']:<7.3e}±{s['final_error_std']:<6.2e} "
-              f"{s['final_kkt_mean']:<7.3e}±{s['final_kkt_std']:<6.2e} {s['convergence_rate']:<10.2f}")
-    print("="*80)
+              f"{s['final_kkt_mean']:<7.3e}±{s['final_kkt_std']:<6.2e} {s['final_obj_mean']:<7.3e}±{s['final_obj_std']:<6.2e} "
+              f"{s['runtime_mean']:<7.3f}±{s['runtime_std']:<6.2f}")
+    print("="*95)
     
     return all_results, stats, problem, x_star, f_star
 
