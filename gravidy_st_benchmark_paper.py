@@ -310,6 +310,7 @@ def plot_paper_results(all_results, stats, prob):
     import os
     os.makedirs("figs", exist_ok=True)
     plt.savefig("figs/stiefel_grad_vs_it.pdf", bbox_inches="tight")
+    plt.savefig("figs/stiefel_grad_vs_it.png", bbox_inches="tight", dpi=300)
     plt.show()
     
     # Figure 2: Feasibility vs time (required for paper)
@@ -337,6 +338,7 @@ def plot_paper_results(all_results, stats, prob):
     plt.tight_layout()
     
     plt.savefig("figs/stiefel_feas_vs_time.pdf", bbox_inches="tight")
+    plt.savefig("figs/stiefel_feas_vs_time.png", bbox_inches="tight", dpi=300)
     plt.show()
     
     # Additional figures for completeness
@@ -360,6 +362,7 @@ def plot_paper_results(all_results, stats, prob):
     plt.tight_layout()
     
     plt.savefig("figs/stiefel_err_vs_it.pdf", bbox_inches="tight")
+    plt.savefig("figs/stiefel_err_vs_it.png", bbox_inches="tight", dpi=300)
     plt.show()
     
     # Figure 4: Final objective values (bar chart across all trials)
@@ -396,13 +399,14 @@ def plot_paper_results(all_results, stats, prob):
     
     plt.tight_layout()
     plt.savefig("figs/stiefel_final_obj.pdf", bbox_inches="tight")
+    plt.savefig("figs/stiefel_final_obj.png", bbox_inches="tight", dpi=300)
     plt.show()
 
 
 if __name__ == "__main__":
     # Paper-grade benchmark
     all_results, stats, prob = run_multi_seed_benchmark(
-        n=200, p=2, cond=1000.0, max_outer=500, max_iters=50000, 
+        n=100, p=2, cond=1000.0, max_outer=500, max_iters=50000, 
         n_trials=10, tol_grad=1e-5
     )
     
