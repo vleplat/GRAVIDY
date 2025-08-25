@@ -329,9 +329,9 @@ If you use GRAVIDY in your research, please cite our paper:
 
 ```bibtex
 @article{gravidy2025,
-  title={GRAVIDY: Geometric Optimization via Implicit Integration},
-  author={Your Name and Co-authors},
-  journal={Journal Name},
+  title={The Geometry of Constrained Optimization: Constrained Gradient Flows via Reparameterization: A-Stable Implicit Schemes, KKT from Stationarity, and Geometry-Respecting Algorithms},
+  author={Valentin Leplat},
+  journal={arXiv},
   year={2025}
 }
 ```
@@ -352,4 +352,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 **Happy optimizing! 🚀**
 
-If you have questions or need help, please open an issue on GitHub.
+For questions, bug reports, or need help, please contact:
+**v dot leplat [at] innopolis dot ru**

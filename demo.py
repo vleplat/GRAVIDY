@@ -57,7 +57,7 @@ def demo_box():
     problem = BoxLeastSquares(A, b, lo, hi)
     
     # Run GRAVIDY
-    x, history = GRAVIDY_box(problem, eta=50.0, max_outer=50, verbose=False)
+    x, history = GRAVIDY_box(problem, eta=20.0, max_outer=50, verbose=False)
     
     # Results
     error = np.linalg.norm(x - x_star)

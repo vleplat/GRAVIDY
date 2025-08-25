@@ -402,7 +402,7 @@ def plot_paper_results(all_results, stats, prob):
 if __name__ == "__main__":
     # Paper-grade benchmark
     all_results, stats, prob = run_multi_seed_benchmark(
-        n=100, p=2, cond=1000.0, max_outer=500, max_iters=50000, 
+        n=200, p=2, cond=1000.0, max_outer=500, max_iters=50000, 
         n_trials=10, tol_grad=1e-5
     )
     

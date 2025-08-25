@@ -149,7 +149,7 @@ def run_single_trial(problem, x_star, eta=50.0, max_iters=400, seed=0, tol_kkt=1
     return results
 
 
-def run_multi_seed_benchmark(n=40, m=40, cond=5.0, eta=50.0, max_iters=400, 
+def run_multi_seed_benchmark(n=40, m=40, cond=1000.0, eta=50.0, max_iters=400, 
                             n_trials=10, tol_kkt=1e-6):
     """Run benchmark with multiple seeds and compute statistics."""
     print(f"\n=== GRAVIDY–Δ Simplex Paper Benchmark ===")
@@ -391,7 +391,7 @@ def plot_paper_results(all_results, stats, problem, x_star, f_star):
 if __name__ == "__main__":
     # Paper-grade benchmark
     all_results, stats, problem, x_star, f_star = run_multi_seed_benchmark(
-        n=40, m=40, cond=5.0, eta=300.0, max_iters=400, 
+        n=40, m=40, cond=1e3, eta=100.0, max_iters=400, 
         n_trials=10, tol_kkt=1e-6
     )
     
