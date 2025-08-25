@@ -1,26 +1,174 @@
 """
 GRAVIDY–pos solver for NNLS / positive-orthant LS:
-Implicit Euler in reparameterized coordinates x = g(u) with g_i(u_i) = exp(u_i) by default.
+Non-pullback implicit Euler in reparameterized coordinates x = exp(u).
 
 Inner solvers:
-- MGN (recommended): solves (J^T J + M I) h = -J^T F (SPD, robust near active faces)
-- Newton       : solves J h = -F (faster when well conditioned)
+- MGN (paper default): solves (J^T J + λ I) h = -J^T F by matrix-free CG
+- Newton: solves J h = -F via SPD transform and CG
 
-Consistent with paper's subsection:
-  F(u) = u - u_k + eta * grad_x Phi(g(u))
-  J(u) = I + eta * H * diag(g'(u)), H = A^T A
+Paper's formulation:
+  F(u) = u - u_k + η ∇_x Φ(x(u)), x(u) = exp(u)
+  J(u) = I + η ∇_x² Φ(x) Diag(x)
 """
 
 import numpy as np
 import time
 
 
-# ---------- Utilities ----------
+# ---------- helpers ----------
 def safe_exp(u):
-    """Clamp to avoid overflow/underflow; keeps positivity mapping numerically stable."""
+    """Conservative clamp to keep positivity mapping numerically stable."""
     return np.exp(np.clip(u, -40.0, 40.0))
 
 
+def _cg(matvec, b, tol=1e-8, maxit=200):
+    """Conjugate Gradient for SPD operator given by matvec(v)."""
+    x = np.zeros_like(b)
+    r = b.copy()
+    p = r.copy()
+    rs = r @ r
+    if rs == 0:
+        return x
+    bnorm2 = max(b @ b, 1e-30)
+    for _ in range(maxit):
+        Ap = matvec(p)
+        denom = p @ Ap + 1e-30
+        alpha = rs / denom
+        x += alpha * p
+        r -= alpha * Ap
+        rs_new = r @ r
+        if rs_new <= (tol * tol) * bnorm2:
+            break
+        beta = rs_new / (rs + 1e-30)
+        p = r + beta * p
+        rs = rs_new
+    return x
+
+
+# ---------- non-pullback INNER: Newton via SPD transform ----------
+def gravidy_pos_step_newton(u_k, eta, A, b, tol=1e-10, max_inner=50,
+                            backtrack_beta=0.5, cg_tol=1e-8, cg_maxit=200):
+    """
+    Non-pullback Newton step: solve J(u) h = -F(u), where
+      F(u) = u - u_k + eta * g(x), x=exp(u), g(x)=A^T(Ax-b)
+      J(u) = I + eta * H * Diag(x), H=A^T A.
+
+    We solve with the SPD transform:
+      let D=Diag(x), h = D^{-1/2} v,
+      (I + eta * D^{1/2} H D^{1/2}) v = - D^{1/2} F
+    by CG, using only A/AT matvecs.
+    """
+    AT = A.T
+
+    def merit(F):  # 0.5 ||F||^2
+        return 0.5 * float(F @ F)
+
+    u = u_k.copy()
+    for _ in range(max_inner):
+        x = safe_exp(u)
+        Ax = A @ x
+        r  = Ax - b
+        g  = AT @ r                       # grad in x
+        F  = (u - u_k) + eta * g          # residual in u
+        nF = np.linalg.norm(F)
+        if nF <= tol:
+            break
+
+        sqrtx = np.sqrt(x)
+        rhs   = - sqrtx * F               # -D^{1/2} F
+
+        # SPD matvec: (I + eta * D^{1/2} H D^{1/2}) v
+        def spd_matvec(v):
+            w  = sqrtx * v                # D^{1/2} v
+            Aw = A @ w
+            HTw = AT @ Aw                 # H * (D^{1/2} v)
+            return v + eta * (sqrtx * HTw)  # v + eta * D^{1/2} H D^{1/2} v
+
+        # solve for v, then recover h = D^{-1/2} v
+        v = _cg(spd_matvec, rhs, tol=cg_tol, maxit=cg_maxit)
+        h = v / (sqrtx + 1e-30)
+
+        # Armijo backtracking on 0.5||F||^2
+        m0 = merit(F)
+        alpha = 1.0
+        while True:
+            u_trial = u + alpha * h
+            x_trial = safe_exp(u_trial)
+            F_trial = (u_trial - u_k) + eta * (AT @ (A @ x_trial) - AT @ b)
+            if merit(F_trial) <= m0 or alpha < 1e-12:
+                u = u_trial
+                break
+            alpha *= backtrack_beta
+
+    x_next = safe_exp(u)
+    return u, x_next
+
+
+# ---------- non-pullback INNER: MGN (paper default) ----------
+def gravidy_pos_step_mgn(u_k, eta, A, b, tol=1e-10, max_inner=50,
+                         lm=1e-6, backtrack_beta=0.5):
+    """
+    Non-pullback MGN step: normal equations (J^T J + lm I) h = - J^T F,
+    with matrix-free J and J^T using only A and A^T products.
+    """
+    AT = A.T
+
+    def merit(F):  # 0.5 ||F||^2
+        return 0.5 * float(F @ F)
+
+    def cg(matvec, b, tol=1e-8, maxit=200):
+        return _cg(matvec, b, tol, maxit)
+
+    u = u_k.copy()
+    for _ in range(max_inner):
+        x  = safe_exp(u)
+        Ax = A @ x
+        r  = Ax - b
+        g  = AT @ r                       # grad in x
+        F  = (u - u_k) + eta * g
+        nF = np.linalg.norm(F)
+        if nF <= tol:
+            break
+
+        # J v = v + eta * A^T( A ( x ⊙ v ) )
+        def Jv(v):
+            return v + eta * (AT @ (A @ (x * v)))
+
+        # J^T v = v + eta * x ⊙ ( A^T( A v ) )
+        def JT(v):
+            return v + eta * (x * (AT @ (A @ v)))
+
+        rhs = -JT(F)
+
+        # (J^T J + lm I) matvec for CG
+        def JTJ(v):
+            return JT(Jv(v)) + lm * v
+
+        # Slightly relaxed tol when residual is large; tightens as ||F|| shrinks
+        cg_tol = min(1e-2, 0.1*np.sqrt(nF) + 1e-12)
+        h = cg(JTJ, rhs, tol=cg_tol, maxit=200)
+
+        # Armijo backtracking on 0.5||F||^2
+        m0 = merit(F)
+        alpha = 1.0
+        while True:
+            u_trial = u + alpha * h
+            x_trial = safe_exp(u_trial)
+            F_trial = (u_trial - u_k) + eta * (AT @ (A @ x_trial) - AT @ b)
+            if merit(F_trial) <= m0 or alpha < 1e-12:
+                u = u_trial
+                break
+            alpha *= backtrack_beta
+
+        # simple LM adaptation (optional)
+        # if alpha == 1.0: lm = max(lm * 0.5, 1e-12)
+        # else:            lm = min(lm * 2.0, 1e-2)
+
+    x_next = safe_exp(u)
+    return u, x_next
+
+
+# ---------- Problem wrapper ----------
 class PositiveLeastSquares:
     """Simple problem wrapper: min_x>=0 0.5||A x - b||^2."""
     def __init__(self, A, b):
@@ -38,188 +186,57 @@ class PositiveLeastSquares:
         return self.H @ x - self.Ab
 
 
-# ---------- Core residuals (consistent with LaTeX) ----------
-def F_val(u, u_k, eta, prob, gprime='exp'):
+# ---------- outer loop ----------
+def GRAVIDY_pos(problem, eta=30.0, max_outer=400, tol_grad=1e-10,
+                inner='mgn', verbose=False):
     """
-    F(u) = u - u_k + eta * grad_x Phi(g(u)), with x=g(u)
-    grad_x Phi(x) = A^T(Ax - b) = H x - A^T b  (here we use prob.grad(x))
+    Non-pullback GRAVIDY–pos outer loop.
+      problem must provide A, b, n, f(x), grad(x).
+    inner: 'mgn' (paper default) or 'newton'
     """
-    x = safe_exp(u) if gprime == 'exp' else None  # extend if you add other maps
-    return (u - u_k) + eta * prob.grad(x)
-
-
-def J_mat(u, eta, prob, gprime='exp'):
-    """
-    J(u) = I + eta * H * diag(g'(u)).
-    For g_i(u_i)=exp(u_i), diag(g'(u))=diag(x)=diag(exp(u)).
-    """
-    if gprime == 'exp':
-        x = safe_exp(u)
-        # Column-scaling of H by x: H @ diag(x)
-        return np.eye(prob.n) + eta * (prob.H @ np.diag(x))
-    else:
-        raise NotImplementedError("Only exp() mapping implemented here.")
-
-
-# ---------- Inner solver: Modified Gauss–Newton (recommended) ----------
-def gravidy_pos_step_mgn(u_k, eta, prob, tol=1e-10, max_iter=50,
-                         M=None, M_min=1e-12, M_max=1e12, growth=2.0):
-    """
-    MGN inner solve for F(u)=0:
-      (J^T J + M I) h = - J^T F
-    Accept if residual decreases; adapt M multiplicatively.
-    """
-    n = prob.n
-    u = u_k.copy()
-
-    def residual(u):
-        F = F_val(u, u_k, eta, prob, gprime='exp')
-        return F, np.linalg.norm(F)
-
-    # initialize damping if not provided (cheap spectral proxy)
-    if M is None:
-        # rough scale: ||H|| * median(x)
-        x0 = safe_exp(u_k)
-        Hnorm = np.linalg.norm(prob.H, 2)
-        M = max(1e-6, Hnorm * max(1e-3, float(np.median(x0))))
-
-    for _ in range(max_iter):
-        F, nF = residual(u)
-        if nF <= tol:
-            break
-
-        J = J_mat(u, eta, prob, gprime='exp')
-
-        # Solve SPD normal eqs (J^T J + M I) h = - J^T F by Cholesky
-        JTJ = J.T @ J
-        rhs = - J.T @ F
-
-        accepted = False
-        inner_tries = 0
-        while not accepted and inner_tries < 5:
-            try:
-                L = np.linalg.cholesky(JTJ + M * np.eye(n))
-                y = np.linalg.solve(L, rhs)
-                h = np.linalg.solve(L.T, y)
-            except np.linalg.LinAlgError:
-                # if factorization fails, increase damping and retry
-                M = min(M_max, M * growth)
-                inner_tries += 1
-                continue
-
-            u_trial = u + h
-            F_trial, nF_trial = residual(u_trial)
-
-            if nF_trial < nF:  # success
-                u = u_trial
-                # decrease damping (but keep a floor)
-                M = max(M_min, M / growth)
-                accepted = True
-            else:
-                # increase damping and retry (short-circuit line search)
-                M = min(M_max, M * growth)
-                inner_tries += 1
-
-        # if we couldn't accept the step after retries, do a small safeguarded step
-        if not accepted:
-            u = u - (rhs / (np.linalg.norm(JTJ, 2) + M + 1e-12))  # tiny gradient-like fallback
-
-    x_next = safe_exp(u)
-    return u, x_next
-
-
-# ---------- Inner solver: pure Newton (optional) ----------
-def gravidy_pos_step_newton(u_k, eta, prob, tol=1e-10, max_newton=50, backtrack_beta=0.5):
-    """
-    Newton on J(u) h = -F(u), with backtracking on m(u)=0.5||F(u)||^2.
-    Uses the *consistent* J(u)=I + eta * H * diag(exp(u)) (no extra terms).
-    """
-    def merit(u):
-        F = F_val(u, u_k, eta, prob, gprime='exp')
-        return 0.5 * float(F @ F)
-
-    u = u_k.copy()
-    n = prob.n
-    for _ in range(max_newton):
-        F = F_val(u, u_k, eta, prob, gprime='exp')
-        nF = np.linalg.norm(F)
-        if nF < tol:
-            break
-
-        J = J_mat(u, eta, prob, gprime='exp')
-        # Solve J h = -F (symmetric-indefinite possible)
-        try:
-            h = -np.linalg.solve(J, F)
-        except np.linalg.LinAlgError:
-            h = -np.linalg.pinv(J) @ F
-
-        # Armijo backtracking on merit
-        m0 = merit(u)
-        alpha = 1.0
-        while True:
-            u_trial = u + alpha * h
-            if merit(u_trial) <= m0 or alpha < 1e-12:
-                break
-            alpha *= backtrack_beta
-        u = u_trial
-
-    x_next = safe_exp(u)
-    return u, x_next
-
-
-# ---------- Outer driver ----------
-def GRAVIDY_pos(problem, eta=30.0, max_outer=400, tol_grad=1e-10, inner='mgn',
-                verbose=False):
-    """
-    GRAVIDY–pos outer loop. Choose inner='mgn' (default) or 'newton'.
-    """
-    prob = problem
-    n = prob.n
-
-    # start from u=0 => x=1 (neutral positive point)
-    u = np.zeros(n)
+    A, b, n = problem.A, problem.b, problem.n
+    u = np.zeros(n)          # x = 1 initial
     x = safe_exp(u)
 
     history = []
     t0 = time.time()
 
     for k in range(max_outer):
-        obj_val = prob.f(x)
-        grad = prob.grad(x)
+        obj_val = problem.f(x)
+        grad    = problem.grad(x)
         grad_norm = np.linalg.norm(grad)
-        t = time.time() - t0
-        history.append((k, obj_val, grad_norm, t))
+        history.append((k, obj_val, grad_norm, time.time() - t0))
 
-        if verbose and (k % 50 == 0 or k == max_outer - 1):
-            print(f"[GRAVIDY-pos/{inner}] it={k:4d}  f={obj_val:.6e}  ||grad||={grad_norm:.3e}  t={t:.2f}s")
+        if verbose and (k % 50 == 0):
+            print(f"[GRAVIDY-pos/{inner}] iter={k:4d} f={obj_val:.6e} ||grad||={grad_norm:.3e}")
+
+        # Optional KKT residual for the orthant:
+        # kkt = np.linalg.norm(x * grad, ord=np.inf)
 
         if grad_norm <= tol_grad:
             break
 
         if inner == 'mgn':
-            u, x = gravidy_pos_step_mgn(u, eta, prob, tol=1e-10, max_iter=50)
+            u, x = gravidy_pos_step_mgn(u, eta, A, b, tol=1e-10)
         elif inner == 'newton':
-            u, x = gravidy_pos_step_newton(u, eta, prob, tol=1e-10, max_newton=50)
+            u, x = gravidy_pos_step_newton(u, eta, A, b, tol=1e-10)
         else:
-            raise ValueError("inner must be 'mgn' or 'newton'")
+            raise ValueError("inner must be 'mgn' (paper default) or 'newton'")
 
     return x, history
 
 
-# ---------- Tiny smoke test ----------
+# ---------- Example run ----------
 if __name__ == "__main__":
-    np.random.seed(0)
-    m, n = 120, 80
-    A = np.abs(np.random.randn(m, n)) + 0.05 * np.eye(m, n)  # nonnegative-ish
-    x_star = np.abs(np.random.randn(n))
+    np.random.seed(1)
+    m, n = 150, 80
+    A = np.random.randn(m, n)
+    x_star = np.abs(np.random.randn(n))  # positive ground truth
     b = A @ x_star
-
     prob = PositiveLeastSquares(A, b)
-
-    # MGN
-    x_mgn, hist_mgn = GRAVIDY_pos(prob, eta=30.0, inner='mgn', verbose=True)
-    # Newton
-    x_nt,  hist_nt  = GRAVIDY_pos(prob, eta=30.0, inner='newton', verbose=False)
-
-    print("MGN   final f =", prob.f(x_mgn))
+    
+    x_mgn, hist_mgn = GRAVIDY_pos(prob, eta=10.0, inner='mgn', verbose=True)
+    x_nt, hist_nt = GRAVIDY_pos(prob, eta=10.0, inner='newton', verbose=False)
+    
+    print("MGN final f =", prob.f(x_mgn))
     print("Newton final f =", prob.f(x_nt))
