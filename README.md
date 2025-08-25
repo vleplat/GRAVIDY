@@ -1,6 +1,6 @@
-# GRAVIDY: Geometric Optimization Framework
+# GRAVIDY - a new Geometric Optimization Framework
 
-A comprehensive Python framework for geometric optimization on various constraint sets including Stiefel manifolds, simplex, box constraints, and positive orthant (NNLS).
+Gravidy (GRAdient flows with Vanishing Jacobian DYnamics) turns constraints into geometry and then solves the resulting gradient flows with A-stable implicit steps. Instead of projecting or penalizing, Gravidy reparameterizes the feasible set—positivity (orthant), simplex, box, or Stiefel manifold—so feasibility is built in. The Jacobian of the map is used as the local metric, which naturally “damps” motion at active faces (vanishing derivatives / rank loss) and makes complementary slackness a kinematic outcome; at stationarity the dynamics satisfy KKT automatically. Discretization is done with robust implicit integrators: backward Euler (orthant/box) with Modified Gauss–Newton or KL-prox inner solves, and a trapezoidal/Cayley step on Stiefel that stays exactly feasible. The result is monotone descent with no stepsize cap (A-stability), strong empirical robustness at large steps, and clean theory: global convergence in convex settings and linear rates under relative strong convexity—while handling rank-deficient simplex geometry without hacks. We illustrate on NNLS, simplex/box least squares, and orthogonality problems, where the implicit flows are both stable and fast.
 
 ## 🚀 Quick Start Guide
 
