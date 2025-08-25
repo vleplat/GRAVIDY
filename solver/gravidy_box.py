@@ -1,155 +1,247 @@
 """
-GRAVIDY–box solver for box-constrained optimization.
-Implements implicit reparameterization with damped Newton.
+GRAVIDY–box solver for box-constrained least squares:
+Non-pullback implicit Euler in reparameterized coordinates x = lo + (hi-lo) * sigmoid(z).
+
+Inner solvers:
+- MGN (paper default): solves (J^T J + λ I) h = -J^T F by matrix-free CG
+- Newton: solves J h = -F via SPD transform and CG
+
+Paper's formulation:
+  F(z) = z - z_k + η ∇_x Φ(x(z)), x(z) = lo + (hi-lo) * sigmoid(z)
+  J(z) = I + η ∇_x² Φ(x) Diag(g'(z))
 """
 
 import numpy as np
 import time
 
 
+# -------- numerically-stable sigmoid and box map --------
 def sigmoid(z):
-    """Sigmoid function: 1/(1 + exp(-z))"""
-    return 1.0 / (1.0 + np.exp(-z))
+    zc = np.clip(z, -50.0, 50.0)
+    return 1.0 / (1.0 + np.exp(-zc))
 
 
-def gravidy_box_step(z_k, eta, A, b, lo, hi, tol=1e-10, max_newton=50, backtrack_beta=0.5):
+def box_x(z, lo, hi):
+    s = sigmoid(z)
+    return lo + (hi - lo) * s
+
+
+def box_gprime(z, lo, hi):
+    s = sigmoid(z)
+    return (hi - lo) * s * (1.0 - s)  # elementwise > 0 since hi>lo
+
+
+# -------- tiny CG (SPD) --------
+def _cg(matvec, b, tol=1e-8, maxit=200):
+    x = np.zeros_like(b)
+    r = b - matvec(x)
+    p = r.copy()
+    rs = r @ r
+    bnorm2 = max(b @ b, 1e-30)
+    if rs <= (tol * tol) * bnorm2:
+        return x
+    for _ in range(maxit):
+        Ap = matvec(p)
+        denom = p @ Ap + 1e-30
+        alpha = rs / denom
+        x += alpha * p
+        r -= alpha * Ap
+        rs_new = r @ r
+        if rs_new <= (tol * tol) * bnorm2:
+            break
+        p = r + (rs_new / (rs + 1e-30)) * p
+        rs = rs_new
+    return x
+
+
+# -------- inner: Newton (non-pullback, paper-faithful) --------
+def gravidy_box_step_newton(z_k, eta, A, b, lo, hi,
+                            tol=1e-10, max_newton=50,
+                            backtrack_beta=0.5, cg_tol=1e-8, cg_maxit=200):
     """
-    Single GRAVIDY–box step with implicit reparameterization.
-    
-    Reparameterization x(z) = lo + (hi-lo) ∘ sigmoid(z).
-    Backward Euler in z: F(z) = z - z_k + eta * D(z) ∇f(x(z)) = 0,
-    where D(z) = diag(g'(z)) and g'(z) = (hi-lo)*sigmoid(z)*(1-sigmoid(z)).
-    
-    Args:
-        z_k: Current parameterization
-        eta: Step size parameter
-        A, b: Least squares problem data
-        lo, hi: Box bounds
-        tol: Newton tolerance
-        max_newton: Maximum Newton iterations
-        backtrack_beta: Backtracking factor
-        
-    Returns:
-        z_next: Next parameterization
-        x_next: Next solution in original coordinates
+    Solve F(z)=0 with F(z)=z - z_k + eta * grad_x Phi(x(z)),
+    Phi(x)=0.5||Ax-b||^2,  x(z)=lo + (hi-lo)*sigmoid(z).
+    J = I + eta * H * D,   H=A^T A,  D=diag(g'(z)).
+    Newton system solved via SPD transform: (I + eta * sqrt(D) H sqrt(D)) v = - sqrt(D) F,
+    then h = D^{-1/2} v.
     """
-    n = z_k.size
-    H = A.T @ A  # Hessian for least squares
-    z = z_k.copy()
-
-    def g_x(z):
-        """Reparameterization: x(z) = lo + (hi-lo) * sigmoid(z)"""
-        s = sigmoid(z)
-        return lo + (hi - lo) * s
-
-    def gprime(z):
-        """Derivative of reparameterization: g'(z) = (hi-lo) * sigmoid(z) * (1-sigmoid(z))"""
-        s = sigmoid(z)
-        return (hi - lo) * s * (1.0 - s)
-
-    def gsecond(z):
-        """Second derivative: g''(z) = (hi-lo) * sigmoid(z) * (1-sigmoid(z)) * (1-2*sigmoid(z))"""
-        s = sigmoid(z)
-        return (hi - lo) * s * (1.0 - s) * (1.0 - 2.0 * s)
+    AT = A.T
 
     def F_val(z):
-        """Residual function: F(z) = z - z_k + eta * D(z) * ∇f(x(z))"""
-        x = g_x(z)
-        return z - z_k + eta * (gprime(z) * (A.T @ (A @ x - b)))
+        x = box_x(z, lo, hi)
+        r = A @ x - b
+        g = AT @ r
+        return (z - z_k) + eta * g
 
-    def merit(z):
-        """Merit function: 0.5 * ||F(z)||^2"""
-        F = F_val(z)
+    def merit(F):
         return 0.5 * float(F @ F)
 
+    z = z_k.copy()
     for _ in range(max_newton):
-        x = g_x(z)
-        gp = gprime(z)
-        gpp = gsecond(z)
-        gradf = A.T @ (A @ x - b)
-
-        F = z - z_k + eta * (gp * gradf)
-        if np.linalg.norm(F) < tol:
+        x = box_x(z, lo, hi)
+        r = A @ x - b
+        g = AT @ r
+        F = (z - z_k) + eta * g
+        nF = np.linalg.norm(F)
+        if nF <= tol:
             break
 
-        # Jacobian K = I + eta * [ diag(g'' ∘ gradf) + D H D ]
-        D = np.diag(gp)
-        K = np.eye(n) + eta * (np.diag(gpp * gradf) + D @ H @ D)
+        gp = box_gprime(z, lo, hi)
+        sqrtgp = np.sqrt(np.maximum(gp, 0.0))
+        rhs = - sqrtgp * F  # -D^{1/2} F
 
-        # Solve K h = -F
-        try:
-            h = -np.linalg.solve(K, F)
-        except np.linalg.LinAlgError:
-            # Add small damping for numerical stability
-            Kd = K + 1e-10 * np.eye(n)
-            h = -np.linalg.solve(Kd, F)
+        # SPD operator: v -> v + eta * sqrt(D) H sqrt(D) v
+        def spd_matvec(v):
+            w = sqrtgp * v                   # sqrt(D) v
+            Aw = A @ w
+            HTw = AT @ Aw                    # H * sqrt(D) v
+            return v + eta * (sqrtgp * HTw)  # v + eta * sqrt(D) H sqrt(D) v
 
-        # Armijo backtracking on merit function
-        m0 = merit(z)
+        v = _cg(spd_matvec, rhs, tol=cg_tol, maxit=cg_maxit)
+        h = v / (sqrtgp + 1e-30)            # h = D^{-1/2} v
+
+        # Armijo backtracking on 0.5||F||^2
+        m0 = merit(F)
         alpha = 1.0
         while True:
             z_trial = z + alpha * h
-            if merit(z_trial) <= m0 or alpha < 1e-12:
+            F_trial = F_val(z_trial)
+            if merit(F_trial) <= m0 or alpha < 1e-12:
+                z = z_trial
                 break
             alpha *= backtrack_beta
-        z = z_trial
 
-    return z, g_x(z)
+    return z, box_x(z, lo, hi)
 
 
-def GRAVIDY_box(problem, eta=10.0, max_outer=200, tol_grad=1e-10, inner='newton', verbose=False):
+# -------- inner: MGN (matrix-free, non-pullback) --------
+def gravidy_box_step_mgn(z_k, eta, A, b, lo, hi, tol=1e-10, max_iter=50,
+                         lm=1e-6, backtrack_beta=0.5):
     """
-    GRAVIDY–box solver for box-constrained optimization.
-    
-    Args:
-        problem: BoxLeastSquares problem instance
-        eta: Step size parameter
-        max_outer: Maximum outer iterations
-        tol_grad: Convergence tolerance
-        verbose: Print progress
-        
-    Returns:
-        x: Final solution
-        history: List of (iter, obj_val, grad_norm, time) tuples
+    Modified Gauss–Newton on (J^T J + lm I) h = - J^T F,
+    with Jv = v + eta * A^T( A ( D v ) ),  JT v = v + eta * D ( A^T (A v) ).
     """
-    A = problem.A
-    b = problem.b
-    lo = problem.lo
-    hi = problem.hi
-    n = problem.n
-    
-    # Initialize parameterization to map to midpoint
-    z = np.zeros(n)
-    x = lo + (hi - lo) * sigmoid(z)
-    
+    AT = A.T
+
+    def F_val(z):
+        x = box_x(z, lo, hi)
+        return (z - z_k) + eta * (AT @ (A @ x - b))
+
+    def merit(F):
+        return 0.5 * float(F @ F)
+
+    z = z_k.copy()
+    for _ in range(max_iter):
+        x = box_x(z, lo, hi)
+        gp = box_gprime(z, lo, hi)
+        Dv = lambda v: gp * v
+
+        F = F_val(z)
+        nF = np.linalg.norm(F)
+        if nF <= tol:
+            break
+
+        def Jv(v):
+            return v + eta * (AT @ (A @ Dv(v)))
+
+        def JT(v):
+            return v + eta * Dv(AT @ (A @ v))
+
+        rhs = - JT(F)
+
+        def JTJ(v):
+            return JT(Jv(v)) + lm * v
+
+        # relaxed tol when far, tighter when close
+        cg_tol = min(1e-2, 0.1*np.sqrt(max(nF, 1e-30)))
+        h = _cg(JTJ, rhs, tol=cg_tol, maxit=200)
+
+        # Armijo backtracking on 0.5||F||^2
+        m0 = merit(F)
+        alpha = 1.0
+        while True:
+            z_trial = z + alpha * h
+            F_trial = F_val(z_trial)
+            if merit(F_trial) <= m0 or alpha < 1e-12:
+                z = z_trial
+                break
+            alpha *= backtrack_beta
+
+        # optional LM adaptation:
+        # if alpha == 1.0: lm = max(lm * 0.5, 1e-12)
+        # else:            lm = min(lm * 2.0, 1e-2)
+
+    return z, box_x(z, lo, hi)
+
+
+# -------- Problem wrapper --------
+class BoxLeastSquares:
+    """Simple problem wrapper: min_x 0.5||A x - b||^2 s.t. lo <= x <= hi."""
+    def __init__(self, A, b, lo, hi):
+        self.A = A
+        self.b = b
+        self.lo = lo
+        self.hi = hi
+        self.n = A.shape[1]
+        self.H = A.T @ A  # Hessian
+        self.Ab = A.T @ b
+
+    def f(self, x):
+        r = self.A @ x - self.b
+        return 0.5 * float(r @ r)
+
+    def grad(self, x):
+        return self.H @ x - self.Ab
+
+
+# -------- outer driver --------
+def GRAVIDY_box(problem, eta=10.0, max_outer=200, tol_grad=1e-10, inner='mgn', verbose=False):
+    """
+    Non-pullback GRAVIDY–box outer loop (paper-faithful).
+    problem must provide A, b, lo, hi, n, f(x), grad(x).
+    inner: 'newton' or 'mgn'
+    """
+    A, b, lo, hi, n = problem.A, problem.b, problem.lo, problem.hi, problem.n
+    z = np.zeros(n)                 # midpoint in the box
+    x = box_x(z, lo, hi)
+
     history = []
     t0 = time.time()
-    
     for k in range(max_outer):
-        # Compute objective and gradient
-        obj_val = problem.f(x)
-        grad = problem.grad(x)
-        grad_norm = np.linalg.norm(grad)
-        current_time = time.time() - t0
-        
-        history.append((k, obj_val, grad_norm, current_time))
-        
-        if verbose and k % 50 == 0:
-            print(f"[GRAVIDY-box/{inner}] iter={k:4d} f={obj_val:.6e} ||grad||={grad_norm:.3e} time={current_time:.2f}s")
-        
-        # Check convergence
-        if grad_norm <= tol_grad:
+        obj = problem.f(x)
+        g = problem.grad(x)
+        ng = np.linalg.norm(g)
+        history.append((k, obj, ng, time.time() - t0))
+
+        if verbose and (k % 50 == 0):
+            print(f"[GRAVIDY-box/{inner}] it={k:4d}  f={obj:.6e}  ||grad||={ng:.3e}")
+
+        if ng <= tol_grad:
             break
-        
-        # GRAVIDY–box step
+
         if inner == 'newton':
-            z, x = gravidy_box_step(z, eta, A, b, lo, hi, tol=1e-10)
+            z, x = gravidy_box_step_newton(z, eta, A, b, lo, hi, tol=1e-10)
         elif inner == 'mgn':
-            # Import MGN step from the new module
-            from .gravidy_box_mgn import gravidy_box_step_mgn, BoxLeastSquares
-            prob_mgn = BoxLeastSquares(A, b, lo, hi)
-            z, x = gravidy_box_step_mgn(z, eta, prob_mgn, tol=1e-10, max_iter=50)
+            z, x = gravidy_box_step_mgn(z, eta, A, b, lo, hi, tol=1e-10)
         else:
             raise ValueError("inner must be 'newton' or 'mgn'")
-    
+
     return x, history
+
+
+# -------- Example run --------
+if __name__ == "__main__":
+    np.random.seed(1)
+    m, n = 150, 80
+    A = np.random.randn(m, n)
+    lo = -1.0 * np.ones(n)
+    hi = 2.0 * np.ones(n)
+    x_star = lo + (hi - lo) * np.random.rand(n)
+    b = A @ x_star
+    prob = BoxLeastSquares(A, b, lo, hi)
+    
+    x_mgn, hist_mgn = GRAVIDY_box(prob, eta=10.0, inner='mgn', verbose=True)
+    x_nt, hist_nt = GRAVIDY_box(prob, eta=10.0, inner='newton', verbose=False)
+    
+    print("MGN final f =", prob.f(x_mgn))
+    print("Newton final f =", prob.f(x_nt))
